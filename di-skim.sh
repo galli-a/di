@@ -19,7 +19,7 @@ INSTALL_TO="/Applications/$APPNAME.app"
 
 INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo '0'`
 BUILD_NUMBER=`defaults read "$INSTALL_TO/Contents/Info" CFBundleVersion 2>/dev/null || echo 600000`
-FEED_URL="http://skim-app.sourceforge.net/skim.xml"
+FEED_URL="https://skim-app.sourceforge.io/skim.xml"
 
 INFO=($(curl -sfL "$FEED_URL" \
 | tr -s ' ' '\012' \
