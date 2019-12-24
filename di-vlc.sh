@@ -1,88 +1,103 @@
-#!/bin/zsh
+#!/usr/bin/env zsh -f
+# Purpose: 	Download and install the latest version of VLC
 #
-#	Author:		Timothy J. Luoma
-#	Email:		luomat at gmail dot com
-#	Date:		2011-10-26
-#
-#	Purpose: 	get VLC
-#
-#	URL:
+# Author:		Timothy J. Luoma
+# Email:		luomat at gmail dot com
+# Date:		2011-10-26, verified 2018-08-07
+
+## 2019-08-21 - failed to find 'vlc_3.0.8.dmg'
 
 NAME="$0:t"
 
-zmodload zsh/datetime
+INSTALL_TO='/Applications/VLC.app'
 
-TIME=$(strftime "%Y-%m-%d-at-%H.%M.%S" "$EPOCHSECONDS")
+HOMEPAGE="http://www.videolan.org/vlc/"
 
-HOST=`hostname -s`
-HOST="$HOST:l"
+DOWNLOAD_PAGE="http://www.videolan.org/vlc/"
 
-LOG="$HOME/Library/Logs/metalog/$NAME/$HOST/$TIME.log"
+SUMMARY="VLC is a free and open source cross-platform multimedia player and framework that plays most multimedia files as well as DVDs, Audio CDs, VCDs, and various streaming protocols."
 
-[[ -d "$LOG:h" ]] || mkdir -p "$LOG:h"
-[[ -e "$LOG" ]]   || touch "$LOG"
+XML_FEED='http://update.videolan.org/vlc/sparkle/vlc-intel64.xml'
 
-function timestamp { strftime "%Y-%m-%d at %H:%M:%S" "$EPOCHSECONDS" }
-function log { echo "$NAME [`timestamp`]: $@" | tee -a "$LOG" }
+if [ -e "$HOME/.path" ]
+then
+	source "$HOME/.path"
+else
+	PATH=/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin
+fi
 
+# NOTE: XML_FEED does not show 'sparkle:shortVersionString' (they're identical in the app)
 
+INFO=($(curl -sfL "$XML_FEED" \
+	| tr ' ' '\012' \
+	| egrep '^(url|sparkle:version)=' \
+	| tail -2 \
+	| sort \
+	| awk -F'"' '//{print $2}'))
 
-die ()
-{
-	echo "$NAME: $@"
+LATEST_VERSION="$INFO[1]"
+
+URL="$INFO[2]"
+
+if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$URL" = "" ]
+then
+	echo "$NAME: Bad data from $XML_FEED
+	INFO: $INFO
+	LATEST_VERSION: $LATEST_VERSION
+	URL: $URL
+	"
+
 	exit 1
-}
+fi
 
-URL='http://update.videolan.org/vlc/sparkle/vlc-intel64.xml'
+if [[ -e "$INSTALL_TO" ]]
+then
 
-INSTALL_TO="/Applications/VLC.app"
+	INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString`
 
-#URL=`curl -sfL "$URL" | tr -s ' |\012' '\012' | fgrep 'url=' | tr '"' ' ' | awk '{print $NF}' | gsort --version-sort | tail -1`
-
-URL=`curl -sfL "$URL" | tr -s ' |\012' '\012' | fgrep 'url=' | tr '"' ' ' | awk '{print $NF}' | tail -1`
-
-LATEST_VERSION=`echo "$URL:t:r" | tr -dc '[0-9].'`
-
-INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo 0`
-
- if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
- then
- 	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
- 	exit 0
- fi
-
-autoload is-at-least
-
- is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
-
- if [ "$?" = "0" ]
- then
- 	echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
- 	exit 0
- fi
-
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
-
-
-for TEST_DIR in \
-	"$HOME/Sites/iusethis.luo.ma/vlc" \
-	"/Volumes/Drobo2TB/MacMiniColo/Data/Websites/iusethis.luo.ma/vlc" \
-	"$HOME/Downloads"
-do
-	if [ -d "$TEST_DIR" ]
+	if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
 	then
-		export DIR="$TEST_DIR"
-		break
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
+		exit 0
 	fi
-done
 
-FILENAME="$DIR/vlc-$LATEST_VERSION.dmg"
+	autoload is-at-least
 
-cd "$DIR"
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
 
-echo "$NAME: Downloading $URL to $FILENAME"
+	if [ "$?" = "0" ]
+	then
+		echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
+		exit 0
+	fi
 
-curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$URL"
+	echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
+
+fi
+
+FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-$LATEST_VERSION.dmg"
+
+if (( $+commands[lynx] ))
+then
+
+	RELEASE_NOTES_URL=`curl -sfL "$XML_FEED" \
+	| egrep '<sparkle:releaseNotesLink>.*</sparkle:releaseNotesLink>' \
+	| tail -1 \
+	| sed 's#.*<sparkle:releaseNotesLink>##g; s#</sparkle:releaseNotesLink>.*##g;' `
+
+	(echo "$NAME: Release Notes: " ;
+		(curl -sfL "${RELEASE_NOTES_URL}" \
+		 | sed '1,/<td valign="top">/d; /<\/ul>/,$d' \
+		 | sed  '1,/<td valign="top">/d;' \
+		 ; echo '</ul>') \
+		| lynx -dump -nomargins -width=10000 -assume_charset=UTF-8 -pseudo_inlines -stdin ;
+	echo "\nSource: <${RELEASE_NOTES_URL}>" ) | tee "$FILENAME:r.txt"
+
+fi
+
+echo "$NAME: Downloading '$URL' to '$FILENAME':"
+
+curl --continue-at - --fail --location --output "$FILENAME" "$URL"
 
 EXIT="$?"
 
@@ -93,66 +108,45 @@ EXIT="$?"
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && exit 0
 
+echo "$NAME: Mounting $FILENAME:"
 
 MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
-			| fgrep -A 1 '<key>mount-point</key>' \
-			| tail -1 \
-			| sed 's#</string>.*##g ; s#.*<string>##g')
+	| fgrep -A 1 '<key>mount-point</key>' \
+	| tail -1 \
+	| sed 's#</string>.*##g ; s#.*<string>##g')
 
 if [[ "$MNTPNT" == "" ]]
 then
 	echo "$NAME: MNTPNT is empty"
-	exit 0
+	exit 1
 fi
-
 
 if [[ -e "$INSTALL_TO" ]]
 then
-	mv -vf "$INSTALL_TO" "$HOME/.Trash/VLC.$INSTALLED_VERSION.app"
+		# Quit app, if running
+	pgrep -xq "$INSTALL_TO:t:r" \
+	&& LAUNCH='yes' \
+	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
+
+		# move installed version to trash
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.${INSTALLED_VERSION}_${INSTALLED_BUILD}.app"
 fi
 
+echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
 
-ditto --noqtn -v "$MNTPNT/VLC.app" "$INSTALL_TO"
+ditto --noqtn -v "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
 
+EXIT="$?"
 
-MAX_ATTEMPTS="10"
+if [[ "$EXIT" == "0" ]]
+then
+	echo "$NAME: Successfully installed $INSTALL_TO"
+else
+	echo "$NAME: ditto failed"
 
-SECONDS_BETWEEN_ATTEMPTS="1"
+	exit 1
+fi
 
-	# strip away anything that isn't a 0-9 digit
-SECONDS_BETWEEN_ATTEMPTS=$(echo "$SECONDS_BETWEEN_ATTEMPTS" | tr -dc '[0-9]')
-MAX_ATTEMPTS=$(echo "$MAX_ATTEMPTS" | tr -dc '[0-9]')
-
-	# initialize the counter
-COUNT=0
-
-	# NOTE this 'while' loop can be changed to something else
-while [ -d "$MNTPNT" ]
-do
-
-		# increment counter (this is why we init to 0 not 1)
-	((COUNT++))
-
-		# check to see if we have exceeded maximum attempts
-	if [ "$COUNT" -gt "$MAX_ATTEMPTS" ]
-	then
-
-		echo "$NAME: Exceeded $MAX_ATTEMPTS"
-
-		exit 0
-	fi
-
-		# don't sleep the first time through the loop
-	[[ "$COUNT" != "1" ]] && sleep ${SECONDS_BETWEEN_ATTEMPTS}
-
-	# Do whatever you want to do in the 'while' loop here
-	diskutil eject "$MNTPNT"
-
-done
-
-
-
+echo -n "$NAME: Unmounting $MNTPNT: " && diskutil eject "$MNTPNT"
 
 exit 0
-
-

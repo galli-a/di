@@ -1,106 +1,169 @@
 #!/bin/zsh -f
-# Purpose: download and install alfred, or update it if already installed
+# Purpose: Updated for Alfred 4
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
-# Date:	2015-11-10
+# Date:	2019-05-29
 
 NAME="$0:t:r"
 
-LAUNCH='no'
-
-if [ -e "$HOME/.path" ]
+if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
 else
 	PATH='/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin'
 fi
 
-INSTALL_TO='/Applications/Alfred 3.app'
+XML_FEED='https://www.alfredapp.com/app/update4/general.xml'
 
-	# Note that we are using the Build Number/CFBundleVersion for Alfred,
-	# because that changes more often than the CFBundleShortVersionString
-INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleVersion 2>/dev/null || echo '0'`
+PLIST="${TMPDIR-/tmp}/${NAME}.$$.$RANDOM.plist"
 
+rm -f "$PLIST"
 
-if [ -e "$HOME/.di-alfred-prefer-betas" ]
+curl -sfLS "$XML_FEED" > "$PLIST"
+
+if [[ ! -s "$PLIST" ]]
 then
-		## this is for betas 
-	XML_FEED='https://www.alfredapp.com/app/update/prerelease.xml'
-	CHANNEL='Beta'
+	echo "$NAME: '$PLIST' is empty."
+	exit 1
+fi
+
+INSTALL_TO='/Applications/Alfred 4.app'
+
+RELEASE_NOTES=$(defaults read "${PLIST}" changelogdata)
+
+LATEST_BUILD=$(defaults read "${PLIST}" build)
+
+URL=$(defaults read "${PLIST}" location)
+
+LATEST_VERSION=$(defaults read "${PLIST}" version)
+
+	# If any of these are blank, we cannot continue
+if [ "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
+then
+	echo "$NAME: Error: bad data received:
+	LATEST_VERSION: $LATEST_VERSION
+	LATEST_BUILD: $LATEST_BUILD
+	URL: $URL
+	"
+
+	exit 1
+fi
+
+if [[ -e "$INSTALL_TO" ]]
+then
+
+	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
+
+	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
+
+	autoload is-at-least
+
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
+
+	VERSION_COMPARE="$?"
+
+	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
+
+	BUILD_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
+	then
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
+		exit 0
+	fi
+
+	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
+
+	FIRST_INSTALL='no'
 
 else
-		## THis is for official, non-beta versions
-	XML_FEED='https://www.alfredapp.com/app/update/general.xml'
-	CHANNEL='Official'
+
+	FIRST_INSTALL='yes'
 fi
 
-echo "$NAME: Checking for $CHANNEL updates..."
+# <string>https://cachefly.alfredapp.com/Alfred_4.0_1076.tar.gz</string>
 
-INFO=($(curl -sfL $XML_FEED \
-	| egrep -A1 '<key>version</key>|<key>build</key>|<key>location</key>' \
-	| egrep '<string>|<integer>' \
-	| head -3 \
-	| awk -F'>|<' '//{print $3}'))
+FILENAME="$HOME/Downloads/Alfred-${LATEST_VERSION}_${LATEST_BUILD}.tgz"
 
-BUILD="$INFO[1]"
-URL="$INFO[2]"
-MAJOR_VERSION="$INFO[3]"
-
-	# If any of these are blank, we should not continue
-if [ "$INFO" = "" -o "$BUILD" = "" -o "$URL" = "" ]
+if (( $+commands[lynx] ))
 then
-	echo "$NAME: Error: bad data received:\nINFO: $INFO"
-	exit 0
+
+	(echo "Alfred ${LATEST_VERSION} / ${LATEST_BUILD} \nURL: ${URL}\n\n$RELEASE_NOTES") | tee "$FILENAME:r.txt"
+
 fi
 
-FILENAME="$HOME/Downloads/Alfred-${MAJOR_VERSION}-${BUILD}.zip"
+## Downloading
 
+echo "$NAME: Downloading '$URL' to '$FILENAME':"
 
- if [[ "$BUILD" == "$INSTALLED_VERSION" ]]
- then
- 	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
- 	exit 0
- fi
+curl --continue-at - --fail --location --output "$FILENAME" "$URL"
 
-autoload is-at-least
+EXIT="$?"
 
- is-at-least "$BUILD" "$INSTALLED_VERSION"
- 
- if [ "$?" = "0" ]
- then
- 	echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $BUILD"
- 	exit 0
- fi
+	## exit 22 means 'the file was already fully downloaded'
+[ "$EXIT" != "0" -a "$EXIT" != "22" ] && echo "$NAME: Download of $URL failed (EXIT = $EXIT)" && exit 0
 
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $BUILD)"
+[[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
 
-echo "$NAME: Downloading $URL to $FILENAME"
+[[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
-curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$URL"
+## Un-Archiving
 
-if [ -e "$INSTALL_TO" ]
+TEMPDIR=$(mktemp -d "${TMPDIR-/tmp}/$NAME.XXXXXX")
+
+echo "$NAME: Extracting '$FILENAME' to '$TEMPDIR':"
+
+tar -C "$TEMPDIR" -z -x -f "$FILENAME"
+
+TEMPAPP="$TEMPDIR/Alfred 4.app"
+
+if [[ ! -d "$TEMPAPP" ]]
 then
+
+	echo "$NAME: Did not find '$TEMPAPP'. Giving up."
+
+	exit 1
+
+fi
+
+## Move old version
+
+if [[ -e "$INSTALL_TO" ]]
+then
+
+		## the release notes for 4.0 suggests that the AppleScript syntax should be
+		## 		osascript -e 'tell application "com.runningwithcrayons.Alfred" to quit'
+		## but that does not actually cause Alfred 4 to quit.
+		## However
+		## 		osascript -e 'tell application "Alfred 4" to quit'
+		## does work, so we use that
+		##
+		## Also `pgrep -x "Alfred 4"` does not work but `pgrep -x "Alfred"` does
+
 		# Quit app, if running
-	pgrep -xq "Alfred 3" \
+	pgrep -xq "Alfred" \
 	&& LAUNCH='yes' \
-	&& osascript -e 'tell application "Alfred 3" to quit'
+	&& osascript -e 'tell application "Alfred 4" to quit'
 
 		# move installed version to trash
-	mv -vf "$INSTALL_TO" "$HOME/.Trash/Alfred 3.$INSTALLED_VERSION.app"
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t.$INSTALLED_VERSION.app"
 fi
 
-echo "$NAME: Installing $FILENAME to $INSTALL_TO:h/"
+mv -vn "$TEMPAPP" "$INSTALL_TO"
 
-ditto --noqtn -xk "$FILENAME" "$INSTALL_TO:h/" \
-&& echo "$NAME: Successfully installed"
+EXIT="$?"
 
-ditto --noqtn -xk "$FILENAME" "$INSTALL_TO:h/"
-
-if [ "$LAUNCH" = "yes" ]
+if [ "$EXIT" = "0" ]
 then
-	echo "$NAME: Launching Alfred 3"
-	open -a "Alfred 3"
+	echo "$NAME: Installed new version to '$INSTALL_TO'."
+
+	[[ "$LAUNCH" = "yes" ]] && open -g -j -a "$INSTALL_TO"
+
+else
+	echo "$NAME: failed (\$EXIT = $EXIT)"
+
+	exit 1
 fi
 
 exit 0

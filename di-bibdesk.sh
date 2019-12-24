@@ -1,12 +1,11 @@
-#!/bin/zsh -f
-# Purpose: 
+#!/usr/bin/env zsh -f
+# Purpose: Download and install the latest version of BibDesk
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
 # Date:	2015-11-14
 
 NAME="$0:t:r"
-APPNAME="BibDesk"
 
 if [ -e "$HOME/.path" ]
 then
@@ -15,84 +14,158 @@ else
 	PATH='/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin'
 fi
 
-INSTALL_TO="/Applications/TeX/$APPNAME.app"
+INSTALL_TO="/Applications/TeX/BibDesk.app"
 
-INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo '0'`
-BUILD_NUMBER=`defaults read "$INSTALL_TO/Contents/Info" CFBundleVersion 2>/dev/null || echo 600000`
+HOMEPAGE="https://bibdesk.sourceforge.io"
 
-FEED_URL="http://bibdesk.sourceforge.net/bibdesk.xml"
+DOWNLOAD_PAGE="https://bibdesk.sourceforge.io"
 
-INFO=($(curl -sfL "$FEED_URL" \
-| tr -s ' ' '\012' \
-| egrep 'sparkle:shortVersionString=|url=' \
-| head -2 \
-| awk -F'"' '/^/{print $2}'))
+SUMMARY="Use BibDesk to edit and manage your bibliography. It will keep track of both the bibliographic information and the associated files or web links for you. BibDesk’s services will simplify using your bibliography in other applications and are particularly well suited for LATEX users."
 
-URL="$INFO[2]"
+XML_FEED="https://bibdesk.sourceforge.io/bibdesk.xml"
+
+RELEASE_NOTES_URL="$XML_FEED"
+
+INFO=($(curl -sfL "$XML_FEED" \
+		| tr -s ' ' '\012' \
+		| egrep 'sparkle:version=|sparkle:shortVersionString=|url=' \
+		| head -3 \
+		| sort \
+		| awk -F'"' '/^/{print $2}'))
+
 LATEST_VERSION="$INFO[1]"
+LATEST_BUILD="$INFO[2]"
+URL="$INFO[3]"
 
-
-#	If any of these are blank, we should not continue
-if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$URL" = "" ]
+	# If any of these are blank, we should not continue
+if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" ]
 then
-	echo "$NAME: Error: bad data received:\nINFO: $INFO"
-	exit 0
+	echo "$NAME: Error: bad data received:\nINFO: $INFO\nLATEST_VERSION: $LATEST_VERSION\nLATEST_BUILD: $LATEST_BUILD\nURL: $URL"
+	exit 1
 fi
 
- if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
- then
- 	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
- 	exit 0
- fi
-
-autoload is-at-least
-
- is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
- 
- if [ "$?" = "0" ]
- then
- 	echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
- 	exit 0
- fi
-
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
-
-FILENAME="$HOME/Downloads/${APPNAME//[[:space:]]/}-$LATEST_VERSION.dmg"
-
-echo "$NAME: Downloading $URL to $FILENAME"
-
-curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$URL"
-
-MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
-		| fgrep -A 1 '<key>mount-point</key>' \
-		| tail -1 \
-		| sed 's#</string>.*##g ; s#.*<string>##g')
-
-if [ -e "$INSTALL_TO" ]
+if [[ -e "$INSTALL_TO" ]]
 then
-	pgrep -qx "$APPNAME" && LAUNCH='yes' && killall "$APPNAME"
-	mv -f "$INSTALL_TO" "$HOME/.Trash/$APPNAME.$INSTALLED_VERSION.app"
+
+	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
+
+	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
+
+	autoload is-at-least
+
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
+
+	VERSION_COMPARE="$?"
+
+	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
+
+	BUILD_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
+	then
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
+		exit 0
+	fi
+
+	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
+
+	FIRST_INSTALL='no'
+
+else
+
+	FIRST_INSTALL='yes'
 fi
 
-echo "$NAME: Installing $FILENAME to $INSTALL_TO:h/"
+FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}_${LATEST_BUILD}.dmg"
 
-ditto --noqtn -xk "$FILENAME" "$INSTALL_TO:h/"
+if (( $+commands[lynx] ))
+then
 
-ditto "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
+	( curl -sfLS "$XML_FEED" \
+	| sed '1,/<description>/d; /<\/description>/,$d ; s#\<\!\[CDATA\[##g' \
+	| fgrep -v '<title>' \
+	| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin | sed 's#^ *##g' ;
+	echo "\nSource: XML_FEED <$XML_FEED>" ) | tee "$FILENAME:r.txt"
+
+fi
+
+echo "$NAME: Downloading '$URL' to '$FILENAME':"
+
+curl --continue-at - --fail --location --output "$FILENAME" "$URL"
 
 EXIT="$?"
 
-if [ "$EXIT" = "0" ]
+	## exit 22 means 'the file was already fully downloaded'
+[ "$EXIT" != "0" -a "$EXIT" != "22" ] && echo "$NAME: Download of $URL failed (EXIT = $EXIT)" && exit 0
+
+[[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
+
+[[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
+
+(cd "$FILENAME:h" ; echo "\n\nLocal sha256:" ; shasum -a 256 -p "$FILENAME:t" ) >>| "$FILENAME:r.txt"
+
+echo "$NAME: Mounting $FILENAME:"
+
+MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
+	| fgrep -A 1 '<key>mount-point</key>' \
+	| tail -1 \
+	| sed 's#</string>.*##g ; s#.*<string>##g')
+
+if [[ "$MNTPNT" == "" ]]
 then
-	echo "$NAME: Installation of $INSTALL_TO was successful."
-	
-	[[ "$LAUNCH" == "yes" ]] && open -a "$INSTALL_TO"
-	
+	echo "$NAME: MNTPNT is empty"
+	exit 1
 else
-	echo "$NAME: Installation of $INSTALL_TO failed (\$EXIT = $EXIT)\nThe downloaded file can be found at $FILENAME."
+	echo "$NAME: MNTPNT is $MNTPNT"
 fi
 
-diskutil eject "$MNTPNT"
+if [[ -e "$INSTALL_TO" ]]
+then
+		# Quit app, if running
+	pgrep -xq "$INSTALL_TO:t:r" \
+	&& LAUNCH='yes' \
+	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
+
+		# move installed version to trash
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.${INSTALLED_VERSION}_${INSTALLED_BUILD}.app"
+
+	EXIT="$?"
+
+	if [[ "$EXIT" != "0" ]]
+	then
+
+		echo "$NAME: failed to move '$INSTALL_TO' to Trash. ('mv' \$EXIT = $EXIT)"
+
+		exit 1
+	fi
+
+fi
+
+echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
+
+ditto --noqtn -v "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
+
+EXIT="$?"
+
+if [[ "$EXIT" == "0" ]]
+then
+	echo "$NAME: Successfully installed $INSTALL_TO"
+else
+	echo "$NAME: ditto failed"
+
+	exit 1
+fi
+
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
+
+echo -n "$NAME: Unmounting $MNTPNT: " && diskutil eject "$MNTPNT"
 
 exit 0
 EOF
+
+
+# sparkle:version="4603"
+# sparkle:shortVersionString="1.6.16"
+# url="https://sourceforge.net/projects/bibdesk/files/BibDesk/BibDesk-1.6.16/BibDesk-1.6.16.dmg/download"
+
+# 1.6.16 4603 https://sourceforge.net/projects/bibdesk/files/BibDesk/BibDesk-1.6.16/BibDesk-1.6.16.dmg/download

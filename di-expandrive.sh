@@ -1,5 +1,5 @@
 #!/bin/zsh -f
-# Purpose:
+# Purpose: Download and Install the latest version of ExpanDrive for Mac from <http://www.expandrive.com>
 #
 # From:	Tj Luo.ma
 # Mail:	luomat at gmail dot com
@@ -8,95 +8,126 @@
 
 NAME="$0:t:r"
 
-# Not http://updates.expandrive.com/apps/expandrive.xml
+INSTALL_TO='/Applications/ExpanDrive.app'
 
-# XML_FEED="http://updates.expandrive.com/appcast/expandrive.xml?version=5"
+	# Do Not Use: http://updates.expandrive.com/apps/expandrive.xml
 
-XML_FEED="http://updates.expandrive.com/appcast/expandrive.xml?version=5"
+XML_FEED='https://updates.expandrive.com/appcast/expandrive7.json?version=7.0.0'
 
-LATEST_VERSION=`curl -sfL "$XML_FEED" | tr -s '[:blank:]' '\012' | awk -F'"' '/sparkle:version/{print $2}' | head -1`
+HOMEPAGE="https://www.expandrive.com"
 
-INSTALLED_VERSION=`defaults read /Applications/ExpanDrive.app/Contents/Info CFBundleVersion 2>/dev/null || echo '0'`
+DOWNLOAD_PAGE="https://www.expandrive.com/download-expandrive/"
 
- if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
- then
- 	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
- 	exit 0
- fi
+SUMMARY="Access files in the cloud from Finder or Explorer without having to sync or use disk space. ExpanDrive mounts OneDrive, Google Drive, Dropbox, Box, Sharepoint, Amazon S3, FTP, SFTP and more as a Network Drive."
 
-autoload is-at-least
-
- is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
-
- if [ "$?" = "0" ]
- then
- 	echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
- 	exit 0
- fi
-
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
-
-
-DL_URL=`curl -sfL "$XML_FEED" | tr -s '[:blank:]' '\012' | awk -F'"' '/url=/{print $2}' | head -1`
-
-if [ -d "$HOME/Sites/iusethis.luo.ma/expandrive" ]
+if [ -e "$HOME/.path" ]
 then
-	DIR="$HOME/Sites/iusethis.luo.ma/expandrive"
-
-	cd "$DIR"
-
-	mkdir -p old
-
-	mv -vn * old/ 2>/dev/null
-
+	source "$HOME/.path"
 else
-	DIR="$HOME/Downloads"
+	PATH=/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin
 fi
 
-cd "$DIR"
+URL=$(curl -sfLS "$XML_FEED" | awk -F'"' '/url/{print $4}')
 
-FILENAME="$DIR/ExpanDrive-$LATEST_VERSION.dmg"
+LATEST_VERSION=$(echo "$URL" | awk -F'/' '/http/{print $7}' | tr '-' '.')
 
-echo "$NAME: Downloading $DL_URL to $FILENAME"
+	# If any of these are blank, we should not continue
+if [ "$LATEST_VERSION" = "" -o "$URL" = "" ]
+then
+	echo "$NAME: Error: bad data received:\nLATEST_VERSION: $LATEST_VERSION\nURL: $URL"
+	exit 1
+fi
 
-curl --progress-bar --continue-at - --fail --location --output  "$FILENAME" "$DL_URL"
+if [[ -e "$INSTALL_TO" ]]
+then
+
+	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
+
+	autoload is-at-least
+
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
+
+	VERSION_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" ]
+	then
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
+		exit 0
+	fi
+
+	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
+
+	FIRST_INSTALL='no'
+
+else
+
+	FIRST_INSTALL='yes'
+fi
+
+FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}.zip"
+
+echo "$NAME: Downloading '$URL' to '$FILENAME':"
+
+curl --continue-at - --fail --location --output  "$FILENAME" "$URL"
 
 [[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
-while [ "`pgrep ExpanDrive`" != "" ]
-do
+UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
 
-	MSG="ExpanDrive is running. Please quit before proceeding."
+echo "$NAME: Unzipping '$FILENAME' to '$UNZIP_TO':"
 
-	echo "$NAME: $MSG"
+ditto -xk --noqtn "$FILENAME" "$UNZIP_TO"
 
-	if (is-growl-running-and-unpaused.sh)
+EXIT="$?"
+
+if [[ "$EXIT" == "0" ]]
+then
+	echo "$NAME: Unzip successful"
+else
+		# failed
+	echo "$NAME failed (ditto -xkv '$FILENAME' '$UNZIP_TO')"
+
+	exit 1
+fi
+
+if [[ -e "$INSTALL_TO" ]]
+then
+	echo "$NAME: Moving existing (old) \"$INSTALL_TO\" to \"$HOME/.Trash/\"."
+
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
+
+	EXIT="$?"
+
+	if [[ "$EXIT" != "0" ]]
 	then
 
-		growlnotify  \
-		--appIcon "ExpanDrive" \
-		--identifier "$NAME" \
-		--message "$MSG" \
-		--title "$NAME"
+		echo "$NAME: failed to move existing $INSTALL_TO to $HOME/.Trash/"
 
+		exit 1
 	fi
+fi
 
-	sleep 30
+echo "$NAME: Moving new version of '$INSTALL_TO:t' (from '$UNZIP_TO') to '$INSTALL_TO'."
 
-done
+	# Move the file out of the folder
+mv -vn "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
 
+EXIT="$?"
 
-MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
-		| fgrep -A 1 '<key>mount-point</key>' \
-		| tail -1 \
-		| sed 's#</string>.*##g ; s#.*<string>##g')
+if [[ "$EXIT" = "0" ]]
+then
 
-## the App on the DMG is an installer which will move the old app aside and install the new one, then eject the DMG
+	echo "$NAME: Successfully installed '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
 
-open "$MNTPNT/ExpanDrive.app"
+else
+	echo "$NAME: Failed to move '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
 
+	exit 1
+fi
+
+[[ "$FIRST_INSTALL" == "yes" ]] && echo "$NAME: Launching $INSTALL_TO:t:r" && open -a "$INSTALL_TO"
 
 exit 0
 #

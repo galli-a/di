@@ -1,11 +1,25 @@
-#!/bin/zsh -f
-# Purpose: 
+#!/usr/bin/env zsh -f
+# Purpose: Download the latest version of Soundnode from <http://www.soundnodeapp.com>
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
-# Date:	2016-06-02
+# Date:	2016-06-02 ; major update 2019-11-14
 
 NAME="$0:t:r"
+
+## DO NOT USE THIS
+# DOWNLOAD_PAGE="http://www.soundnodeapp.com/downloads/mac/Soundnode.zip"
+#
+## USE THIS
+# https://github.com/Soundnode/soundnode-app/releases/latest
+
+INSTALL_TO="/Applications/Soundnode.app"
+
+HOMEPAGE="https://github.com/Soundnode/soundnode-app"
+
+DOWNLOAD_PAGE='https://github.com/Soundnode/soundnode-app/releases/latest'
+
+SUMMARY="An opensource SoundCloud app for desktop."
 
 if [ -e "$HOME/.path" ]
 then
@@ -14,43 +28,82 @@ else
 	PATH='/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin'
 fi
 
-INSTALL_TO="/Applications/Soundnode.app" 
+	## Get URL of latest release which will include version number
+LATEST_RELEASE_URL=$(curl --head -sfLS "https://github.com/Soundnode/soundnode-app/releases/latest" | awk -F' |\r' '/^Location:/{print $2}')
 
-INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleVersion 2>/dev/null || echo '0'`
+LATEST_VERSION=$(echo "$LATEST_RELEASE_URL:t")
 
-URL='http://www.soundnodeapp.com/downloads/mac/Soundnode-App.zip'
+DOWNLOAD_SUFFIX=$(curl -sfLS "$LATEST_RELEASE_URL" \
+				| tr '"' '\012' \
+				| egrep -i '^/Soundnode/soundnode-app/releases/download/.*\Soundnode-darwin-x64.tar.xz')
 
-LATEST_VERSION=`curl -sfL https://api.github.com/repos/Soundnode/soundnode-app/releases | fgrep tag_name | head -1 | tr -dc '[0-9].'`
+URL=$(echo "https://github.com${DOWNLOAD_SUFFIX}")
 
+	# n.b. CFBundleShortVersionString and CFBundleVersion are identical
 
-if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
+if [[ -e "$INSTALL_TO" ]]
 then
-	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
-	exit 0
+
+	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
+
+	autoload is-at-least
+
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
+
+	VERSION_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" ]
+	then
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
+		exit 0
+	fi
+
+	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
+
+	FIRST_INSTALL='no'
+
+else
+
+	FIRST_INSTALL='yes'
 fi
-
-autoload is-at-least
-
-is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
-
-if [ "$?" = "0" ]
-then
-	echo "$NAME: Up-To-Date ($LATEST_VERSION)"
-	exit 0
-fi
-
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
 
 ####|####|####|####|####|####|####|####|####|####|####|####|####|####|####
 #
 #		Here’s the download section
 #
 
-FILENAME="$HOME/Downloads/Soundnode-$LATEST_VERSION.zip"
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}.tar.xz"
 
-echo "$NAME: Downloading $URL to $FILENAME"
+if (( $+commands[lynx] ))
+then
 
-curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$URL"
+		## 2019-11-14 -- note the '&middot;' replacement
+		## without it, the 'sed' _after_ lynx complains about an 'illegal byte sequence'
+		##
+		## Previously work-around was to prefix the last 'sed' call with
+		## 		LC_ALL=C
+		##
+		## Also note:
+		##  	LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8  == 'sed: RE error: illegal byte sequence'
+		## 		LC_ALL=en_US_UTF-8 = 'middot' replaced with '∑'
+		##
+		## Long story short: just replace '&middot;'
+
+	RELEASE_NOTES=$(curl -sfLS "$LATEST_RELEASE_URL" \
+		| sed -e '1,/release-header/d; /release-body/,$d' -e 's#&middot;#•#g' \
+		| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin \
+		| sed 's#file:///#https://github.com/#g')
+
+	echo "Release Notes for $INSTALL_TO:t:r ($LATEST_VERSION):\n\n${RELEASE_NOTES}\n\nSource: ${LATEST_RELEASE_URL}\nURL: ${URL}" \
+	| tee "$FILENAME:r:r.txt"
+
+	# Note the '"$FILENAME:r:r.txt"' has two :r because the filename is '.tar.xz' not '.txz'
+
+fi
+
+echo "$NAME: Downloading '$URL' to '$FILENAME':"
+
+curl --continue-at - --fail --location --output "$FILENAME" "$URL"
 
 EXIT="$?"
 
@@ -61,45 +114,66 @@ EXIT="$?"
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
-####|####|####|####|####|####|####|####|####|####|####|####|####|####|####
-#
-#		Here’s the 'move the old version aside' section 
-#
+(cd "$FILENAME:h" ; echo "\nLocal sha256:" ; shasum -a 256 -p "$FILENAME:t" ) >>| "$FILENAME:r:r.txt"
 
+# Note: while macOS does not have a separate `xz` command, the `tar` command apparently understands how to deal
+# with a .tar.xz file, going back at least to 10.11
 
-if [ -e "$INSTALL_TO" ]
+UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
+
+echo "$NAME: Unpacking '$FILENAME' to '$UNZIP_TO':"
+
+tar -x -C "$UNZIP_TO" -f "$FILENAME"
+
+EXIT="$?"
+
+if [ "$EXIT" != "0" ]
 then
-		# Quit app, if running
-	pgrep -xq "Soundnode" \
-	&& LAUNCH='yes' \
-	&& osascript -e 'tell application "Soundnode" to quit'
-
-		# move installed version to trash 
-	mv -vf "$INSTALL_TO" "$HOME/.Trash/Soundnode.$INSTALLED_VERSION.app"
+	echo "$NAME: 'tar' failed (\$EXIT = $EXIT)"
+	exit 1
 fi
 
-####|####|####|####|####|####|####|####|####|####|####|####|####|####|####
-#
-#		Here’s the "install the new version" section
-#
+	# This is the path to the actual app in the temporary directory we just created
+TEMP_APP=$(find "$UNZIP_TO" -type d -iname 'Soundnode.app' -maxdepth 2 -print 2>/dev/null)
 
+if [[ "$TEMP_APP" == "" ]]
+then
+	echo "$NAME: Failed to find 'Soundnode.app' in '$UNZIP_TO'." >>/dev/stderr
+	exit 1
+fi
 
+if [[ -e "$INSTALL_TO" ]]
+then
 
-echo "$NAME: Installing $FILENAME to $INSTALL_TO:h/"
+	pgrep -xq "$INSTALL_TO:t:r" \
+	&& LAUNCH='yes' \
+	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
 
-	# Extract from the .zip file and install (this will leave the .zip file in place)
-ditto --noqtn -xk "$FILENAME" "$INSTALL_TO:h/"
+		# move installed version to trash
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
+
+	EXIT="$?"
+
+	if [[ "$EXIT" != "0" ]]
+	then
+		echo "$NAME: failed to move existing $INSTALL_TO to $HOME/.Trash/"
+		exit 1
+	fi
+fi
+
+	## this is where we install the temp file to the place where it belongs
+mv -vn "$TEMP_APP" "$INSTALL_TO"
 
 EXIT="$?"
 
 if [ "$EXIT" = "0" ]
 then
-	echo "$NAME: Installation of $INSTALL_TO was successful."
-	
-	[[ "$LAUNCH" == "yes" ]] && open -a "$INSTALL_TO"
-	
+	echo "$NAME: successfully installed version '$LATEST_VERSION' to '$INSTALL_TO'."
+
 else
-	echo "$NAME: Installation of $INSTALL_TO failed (\$EXIT = $EXIT)\nThe downloaded file can be found at $FILENAME."
+	echo "$NAME: 'mv' failed (\$EXIT = $EXIT)"
+
+	exit 1
 fi
 
 exit 0

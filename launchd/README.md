@@ -1,18 +1,10 @@
-The file `com.tjluoma.di-all.plist` must be installed at `$HOME/Library/LaunchAgents` where "$HOME" stands for your home directory, such as 
 
-	/Users/JSmith/Library/LaunchAgents/com.tjluoma.di-all.plist
-	
-To load it, you either have to a) log out and log in again, or b) use Terminal:
-	
-	launchctl load $HOME/Library/LaunchAgents/com.tjluoma.di-all.plist
-	
-## Command-line Installation 
+The purpose of `com.tjluoma.di-auto.sh` is to create a `launchd` plist which will run [di-auto.sh --update](https://github.com/tjluoma/di/blob/master/di-auto.sh) once a day, which will automatically look for all updates using the `di-` scripts, but only for apps which are already installed.
 
-	mkdir -p "$HOME/Library/LaunchAgents/"
-	
-	cd "$HOME/Library/LaunchAgents/"
+The easiest way to install this is to copy/paste this into Terminal.app:
 
-	curl --remote-name https://raw.githubusercontent.com/tjluoma/di/master/launchd/com.tjluoma.di-all.plist
-	
-	launchctl load $PWD/com.tjluoma.di-all.plist
+	/bin/zsh -c "$(curl -sfL https://raw.githubusercontent.com/tjluoma/di/master/launchd/com.tjluoma.di-auto.sh)"
 
+That will create and load the launchd plist for you.
+
+See [com.tjluoma.di-auto.sh](https://github.com/tjluoma/di/blob/master/launchd/com.tjluoma.di-auto.sh) for more details.

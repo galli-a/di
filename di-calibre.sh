@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env zsh -f
 # Purpose: Download and install new version of Calibre
 #
 # From:	Tj Luo.ma
@@ -8,205 +8,152 @@
 
 NAME="$0:t:r"
 
-zmodload zsh/stat
+INSTALL_TO='/Applications/calibre.app'
 
-##
+HOMEPAGE="https://calibre-ebook.com"
 
-DOWNLOAD_ONLY='no'
+DOWNLOAD_PAGE="https://calibre-ebook.com/download_osx"
 
-for ARGS in "$@"
-do
-	case "$ARGS" in
-		-d|--download)
-				DOWNLOAD_ONLY='yes'
-				shift
-		;;
+SUMMARY="calibre is a powerful and easy to use e-book manager."
 
-		-*|--*)
-				echo "	$NAME [warning]: Don't know what to do with arg: $1"
-				shift
-		;;
+if [[ -e "$HOME/.path" ]]
+then
+	source "$HOME/.path"
+else
+	PATH=/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin
+fi
 
-	esac
-
-done # for args
-
-##
-
-INSTALL_TO="/Applications/calibre.app"
-
-CURRENT_VERSION=`curl -sfL 'http://status.calibre-ebook.com/latest'`
+LATEST_VERSION=`curl -sfL 'http://status.calibre-ebook.com/latest'`
 
 	# curent version is empty, something went wrong
-[[ "$CURRENT_VERSION" = "" ]] && exit 0
+[[ "$LATEST_VERSION" = "" ]] && exit 1
 
-##
+URL="http://download.calibre-ebook.com/${LATEST_VERSION}/calibre-${LATEST_VERSION}.dmg"
 
-if [ -e '/Applications/calibre.app/Contents/Info.plist' ]
+if [[ -e "$INSTALL_TO" ]]
 then
-	LOCAL_VERSION=`defaults read '/Applications/calibre.app/Contents/Info.plist' CFBundleShortVersionString `
-else
-	LOCAL_VERSION='0'
-fi
 
-	# no update needed
-[[ "$CURRENT_VERSION" = "$LOCAL_VERSION" ]] && echo "$NAME: calibre $CURRENT_VERSION is current" && exit 0
+	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
 
-##
+	autoload is-at-least
 
-DOWNLOAD_ACTUAL="http://download.calibre-ebook.com/${CURRENT_VERSION}/calibre-${CURRENT_VERSION}.dmg"
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
 
-cd '/Volumes/Data/Websites/iusethis.luo.ma/calibre/' 2>/dev/null \
-	|| cd "$HOME/BitTorrent Sync/iusethis.luo.ma/calibre/" 2>/dev/null \
-	|| cd "$HOME/Downloads/" 2>/dev/null \
-	|| cd "$HOME/Desktop/" 2>/dev/null \
-	|| cd "$HOME/"
+	VERSION_COMPARE="$?"
 
-FILENAME="$PWD/calibre-${CURRENT_VERSION}.dmg"
-
-########################################################################################################################
-
-if [ -e "$FILENAME" ]
-then
-	LOCAL_SIZE=$(zstat -L +size "$FILENAME")
-else
-	LOCAL_SIZE='0'
-fi
-
-REMOTE_SIZE=$(curl -sfL --head "$DOWNLOAD_ACTUAL" | egrep -i "^Content-Length: " | tail -1  | tr -dc '[0-9]')
-
-MAX_ATTEMPTS="10"
-SECONDS_BETWEEN_ATTEMPTS="10"
-COUNT=0
-
-while [ "$LOCAL_SIZE" -lt "$REMOTE_SIZE" ]
-do
-
-		# increment counter (this is why we init to 0 not 1)
-	((COUNT++))
-
-		# check to see if we have exceeded maximum attempts
-	if [ "$COUNT" -gt "$MAX_ATTEMPTS" ]
+	if [ "$VERSION_COMPARE" = "0" ]
 	then
-
-		echo "$NAME: Exceeded $MAX_ATTEMPTS"
-
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION / $LATEST_VERSION)"
 		exit 0
 	fi
 
-		# don't sleep the first time through the loop
-	[[ "$COUNT" != "1" ]] && sleep ${SECONDS_BETWEEN_ATTEMPTS}
+	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
 
-	# Do whatever you want to do in the 'while' loop here
-	echo "$NAME: Downloading $DOWNLOAD_ACTUAL"
-	curl --progress-bar --location --continue-at - --output "$FILENAME" "$DOWNLOAD_ACTUAL"
+	FIRST_INSTALL='no'
 
-	LOCAL_SIZE=$(zstat -L +size "$FILENAME")
-done
+else
+
+	FIRST_INSTALL='yes'
+fi
 
 ########################################################################################################################
 
-if [ "$DOWNLOAD_ONLY" = "yes" ]
+FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}.dmg"
+
+########################################################################################################################
+
+if (( $+commands[lynx] ))
 then
-	echo "$NAME: Downloaded $DOWNLOAD_ACTUAL to $FILENAME, not installing"
-	exit 0
-else
-	echo "$NAME: Download of $FILENAME from $DOWNLOAD_ACTUAL succeeded."
+
+	RELEASE_NOTES_URL="https://calibre-ebook.com/whats-new"
+
+	( echo "$NAME: Release Notes for $INSTALL_TO:t:r\n" ;
+		curl -sfL "${RELEASE_NOTES_URL}" \
+		| sed '1,/<div class="release">/d; /<div class="release">/,$d' \
+		| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin ;
+		echo "\nSource: <$RELEASE_NOTES_URL>" ) \
+	| tee "$FILENAME:r.txt"
+
 fi
 
+########################################################################################################################
+
+echo "$NAME: Downloading '$URL' to '$FILENAME':"
+
+curl --continue-at - --fail --location --output "$FILENAME" "$URL"
+
+EXIT="$?"
+
+	## exit 22 means 'the file was already fully downloaded'
+[ "$EXIT" != "0" -a "$EXIT" != "22" ] && echo "$NAME: Download of $URL failed (EXIT = $EXIT)" && exit 0
+
+[[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
+
+[[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
+
+(cd "$FILENAME:h" ; echo "\nLocal sha256:" ; shasum -a 256 -p "$FILENAME:t" ) >>| "$FILENAME:r.txt"
 
 ####|####|####|####|####|####|####|####|####|####|####|####|####|####|####
 #
 #		Installation
 #
 
-# MNTPNT=$(echo -n "Y" \
-# 		| hdid -plist "$FILENAME" 2>/dev/null \
-# 		| fgrep -A 1 '<key>mount-point</key>' \
-# 		| tail -1 \
-# 		| sed 's#</string>.*##g ; s#.*<string>##g')
+echo "$NAME: Mounting $FILENAME:"
 
 MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
- 		| fgrep -A 1 '<key>mount-point</key>' \
- 		| tail -1 \
- 		| sed 's#</string>.*##g ; s#.*<string>##g')
+	| fgrep -A 1 '<key>mount-point</key>' \
+	| tail -1 \
+	| sed 's#</string>.*##g ; s#.*<string>##g')
 
-
-if [ "$MNTPNT" = "" ]
+if [[ "$MNTPNT" == "" ]]
 then
-	echo "$NAME: Failed to mount $FILENAME"
+	echo "$NAME: MNTPNT is empty"
 	exit 1
+else
+	echo "$NAME: MNTPNT is $MNTPNT"
 fi
 
-####|####|####|####|####|####|####|####|####|####|####|####|####|####|####
-#
-#		Automatically quit and restart calibre
-#
-
-PLIST="$HOME/Library/LaunchAgents/com.tjluoma.keeprunning.calibre.plist"
-
-if [ -e "$PLIST" ]
+if [[ -e "$INSTALL_TO" ]]
 then
-	launchctl unload "$PLIST"
+		# Quit app, if running
+	pgrep -xq "$INSTALL_TO:t:r" \
+	&& LAUNCH='yes' \
+	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
+
+		# move installed version to trash
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.${INSTALLED_VERSION}_${INSTALLED_BUILD}.app"
+
+	EXIT="$?"
+
+	if [[ "$EXIT" != "0" ]]
+	then
+
+		echo "$NAME: failed to move '$INSTALL_TO' to Trash. ('mv' \$EXIT = $EXIT)"
+
+		exit 1
+	fi
+
 fi
 
-# If calibre is running, wait
-while [ "`pgrep -x calibre`" != "" ]
-do
+echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
 
-	MSG='calibre is running. Please quit to continue'
-
-	growlnotify --sticky --appIcon "calibre" --identifier "$NAME" --message "$MSG" --title "$NAME"
-
-	echo "$NAME: $MSG"
-
-	sleep 10
-done
-
-
-
-if [ -e "$INSTALL_TO" ]
-then
-	mv -vn "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$LOCAL_VERSION.app"
-fi
-
-if [ -e "$INSTALL_TO" ]
-then
-	echo "$NAME: Failed to remove existing $INSTALL_TO"
-	exit 1
-fi
-
-# growlnotify --sticky --appIcon "calibre" --identifier "$NAME" --message "Installing calibre $CURRENT_VERSION" --title "$NAME"
-
-ditto --noqtn -v "$MNTPNT/calibre.app" "$INSTALL_TO"
+ditto --noqtn -v "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
 
 EXIT="$?"
 
-if [ "$EXIT" = "0" ]
+if [[ "$EXIT" == "0" ]]
 then
-
-	MSG="Success! calibre $CURRENT_VERSION installed"
-
-	growlnotify --appIcon "calibre" --identifier "$NAME" --message "$MSG" --title "$NAME"
-
-	echo "$NAME: $MSG"
-
-	if [ -e "$PLIST" ]
-	then
-		launchctl load "$PLIST"
-	fi
-
+	echo "$NAME: Successfully installed $INSTALL_TO"
 else
-	echo "$NAME: installation (ditto) failed (\$EXIT = $EXIT)"
-
-	growlnotify --sticky --appIcon "calibre" --identifier "$NAME" --message "FAILED to install calibre $CURRENT_VERSION (EXIT: $EXIT)" --title "$NAME"
+	echo "$NAME: ditto failed"
 
 	exit 1
 fi
 
-	# Try to eject the DMG
-diskutil eject "$MNTPNT"
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
-exit
+echo -n "$NAME: Unmounting $MNTPNT: " && diskutil eject "$MNTPNT"
+
+exit 0
 #
 #EOF

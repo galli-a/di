@@ -1,13 +1,13 @@
-#!/bin/zsh -f
-# Purpose: 
+#!/usr/bin/env zsh -f
+# Purpose: Download latest version of Lingon 7+
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
-# Date:	2016-05-29
+# Date:	2019-05-17
 
 NAME="$0:t:r"
 
-if [ -e "$HOME/.path" ]
+if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
 else
@@ -16,52 +16,81 @@ fi
 
 INSTALL_TO='/Applications/Lingon X.app'
 
-INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo '0'`
+FEED='https://www.peterborgapps.com/updates/lingonx7.plist'
 
-XML_FEED='https://www.peterborgapps.com/updates/lingonx2-appcast.xml'
+LOCALFEED="${TMPDIR-/tmp}/${NAME}.$$.$RANDOM.plist"
 
-INFO=($(curl -sfL "$XML_FEED" \
-| tr -s ' ' '\012' \
-| egrep 'sparkle:shortVersionString=|url=' \
-| head -2 \
-| sort \
-| awk -F'"' '/^/{print $2}'))
+curl -sfLS "$FEED" >| "$LOCALFEED" || exit 1
 
-	# "Sparkle" will always come before "url" because of "sort"
-LATEST_VERSION="$INFO[1]"
-URL="$INFO[2]"
+LATEST_VERSION=$(defaults read ${LOCALFEED} version | tr -dc '[0-9]\.')
 
-	# If any of these are blank, we should not continue
-if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$URL" = "" ]
+LATEST_BUILD=$(defaults read ${LOCALFEED} build | tr -dc '[0-9]\.')
+
+URL='https://www.peterborgapps.com/downloads/LingonX7.zip'
+
+RELEASE_NOTES=$(defaults read ${LOCALFEED} releaseNotes | sed 's#\\u2022#•#g')
+
+if [ "$LATEST_BUILD" = "" -o "$LATEST_VERSION" = "" ]
 then
-	echo "$NAME: Error: bad data received:\nINFO: $INFO"
-	exit 0
+
+	echo "$NAME: An error has occurred:
+
+	LOCALFEED:		$LOCALFEED
+
+	LATEST_BUILD: 	$LATEST_BUILD
+
+	LATEST_VERSION: $LATEST_VERSION
+
+	RELEASE_NOTES:	$RELEASE_NOTES"
+
+	exit 1
+
 fi
 
-
-if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
+if [[ -e "$INSTALL_TO" ]]
 then
-	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
-	exit 0
+
+	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
+
+	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
+
+	autoload is-at-least
+
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
+
+	VERSION_COMPARE="$?"
+
+	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
+
+	BUILD_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
+	then
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
+		exit 0
+	fi
+
+	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
+
+	FIRST_INSTALL='no'
+
+else
+
+	FIRST_INSTALL='yes'
 fi
 
-autoload is-at-least
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.zip"
 
-is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
-
-if [ "$?" = "0" ]
+if (( $+commands[lynx] ))
 then
-	echo "$NAME: Up-To-Date ($LATEST_VERSION)"
-	exit 0
+
+	( echo "$NAME: Release Notes for $INSTALL_TO:t:r (${LATEST_VERSION}/${LATEST_BUILD}):\n\n${RELEASE_NOTES}\n\nSource: ${FEED}\nURL: $URL" ) | tee "$FILENAME:r.txt"
+
 fi
 
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
+echo "$NAME: Downloading '$URL' to '$FILENAME':"
 
-FILENAME="$HOME/Downloads/LingonX-${LATEST_VERSION}.zip"
-
-echo "$NAME: Downloading $URL to $FILENAME"
-
-curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$URL"
+curl --continue-at - --fail --location --output "$FILENAME" "$URL"
 
 EXIT="$?"
 
@@ -72,37 +101,70 @@ EXIT="$?"
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
+(cd "$FILENAME:h" ; echo "\n\nLocal sha256:" ; shasum -a 256 -p "$FILENAME:t" ) >>| "$FILENAME:r.txt"
 
-if [ -e "$INSTALL_TO" ]
-then
-		# Quit app, if running
-	pgrep -xq "Lingon X" \
-	&& LAUNCH='yes' \
-	&& osascript -e 'tell application "Lingon X" to quit'
+UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
 
-		# move installed version to trash 
-	mv -vf "$INSTALL_TO" "$HOME/.Trash/Lingon X.$INSTALLED_VERSION.app"
-fi
+echo "$NAME: Unzipping '$FILENAME' to '$UNZIP_TO':"
 
-echo "$NAME: Installing $FILENAME to $INSTALL_TO:h/"
-
-	# Extract from the .zip file and install (this will leave the .zip file in place)
-ditto --noqtn -xk "$FILENAME" "$INSTALL_TO:h/"
+ditto -xk --noqtn "$FILENAME" "$UNZIP_TO"
 
 EXIT="$?"
 
-if [ "$EXIT" = "0" ]
+if [[ "$EXIT" == "0" ]]
 then
-	echo "$NAME: Installation of $INSTALL_TO was successful."
-	
-	[[ "$LAUNCH" == "yes" ]] && open -a "$INSTALL_TO"
-	
+	echo "$NAME: Unzip successful"
 else
-	echo "$NAME: Installation of $INSTALL_TO failed (\$EXIT = $EXIT)\nThe downloaded file can be found at $FILENAME."
+		# failed
+	echo "$NAME failed (ditto -xkv '$FILENAME' '$UNZIP_TO')"
+
+	exit 1
 fi
 
+if [[ -e "$INSTALL_TO" ]]
+then
 
+	pgrep -xq "$INSTALL_TO:t:r" \
+	&& LAUNCH='yes' \
+	&& osascript -e "quit application \"$INSTALL_TO:t:r\""
 
+	echo "$NAME: Moving existing (old) '$INSTALL_TO' to '$HOME/.Trash/'."
+
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
+
+	EXIT="$?"
+
+	if [[ "$EXIT" != "0" ]]
+	then
+
+		echo "$NAME: failed to move existing $INSTALL_TO to $HOME/.Trash/"
+
+		exit 1
+	fi
+fi
+
+echo "$NAME: Moving new version of '$INSTALL_TO:t' (from '$UNZIP_TO') to '$INSTALL_TO'."
+
+	# Move the file out of the folder
+mv -vn "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
+
+EXIT="$?"
+
+if [[ "$EXIT" = "0" ]]
+then
+
+	echo "$NAME: Successfully installed '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
+
+else
+	echo "$NAME: Failed to move '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
+
+	exit 1
+fi
+
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
+
+# Clean up our temp file
+rm -f "$LOCALFEED"
 
 exit 0
 #EOF

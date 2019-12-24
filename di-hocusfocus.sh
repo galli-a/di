@@ -1,5 +1,5 @@
 #!/bin/zsh -f
-# Purpose: 
+# Purpose: Download and insstall the latest version of Hocus Focus
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
@@ -16,67 +16,105 @@ fi
 
 INSTALL_TO='/Applications/Hocus Focus.app'
 
-INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo '0'`
+HOMEPAGE="http://hocusfoc.us/"
 
+DOWNLOAD_PAGE="http://hocusfoc.us/static/releases/hocus-focus-latest.zip"
+
+SUMMARY="Keep your desktop clutter free with Hocus Focus, a Mac menu bar utility that hides your inactive windows."
+
+	# Alternate feed
+	# https://rink.hockeyapp.net/api/2/apps/a7c5305d5bad86de2b9275e2d967caa6
+	# They both seem to have the same info in them, but the HockeyApp one is harder to read, so I'll stick with this one
 XML_FEED='http://hocusfoc.us/updates.xml'
 
-INFO=($(curl -sfL "$XML_FEED" \
-| tr -s ' ' '\012' \
-| egrep 'sparkle:shortVersionString=|url=' \
-| head -2 \
-| sort \
-| awk -F'"' '/^/{print $2}'))
+INFO=($(curl -sSfL "${XML_FEED}" \
+		| tr -s ' ' '\012' \
+		| egrep 'sparkle:version|sparkle:shortVersionString|url=' \
+		| head -3 \
+		| sort \
+		| awk -F'"' '/^/{print $2}'))
 
 	# "Sparkle" will always come before "url" because of "sort"
 LATEST_VERSION="$INFO[1]"
-URL="$INFO[2]"
+LATEST_BUILD="$INFO[2]"
+URL="$INFO[3]"
 
-	# If any of these are blank, we should not continue
-if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$URL" = "" ]
+	# If any of these are blank, we cannot continue
+if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
 then
-	echo "$NAME: Error: bad data received:\nINFO: $INFO"
-	exit 0
+	echo "$NAME: Error: bad data received:
+	INFO: $INFO
+	LATEST_VERSION: $LATEST_VERSION
+	LATEST_BUILD: $LATEST_BUILD
+	URL: $URL
+	"
+
+	exit 1
 fi
 
- if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
- then
- 	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
- 	exit 0
- fi
+if [[ -e "$INSTALL_TO" ]]
+then
 
-autoload is-at-least
+	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
 
- is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
- 
- if [ "$?" = "0" ]
- then
- 	echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
- 	exit 0
- fi
+	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
 
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
+	autoload is-at-least
 
-FILENAME="$HOME/Downloads/HocusFocus-${LATEST_VERSION}.zip"
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
+
+	VERSION_COMPARE="$?"
+
+	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
+
+	BUILD_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
+	then
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
+		exit 0
+	fi
+
+	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
+
+	FIRST_INSTALL='no'
+
+else
+
+	FIRST_INSTALL='yes'
+fi
+
+FILENAME="$HOME/Downloads/HocusFocus-${LATEST_VERSION}_${LATEST_BUILD}.zip"
+
+if (( $+commands[lynx] ))
+then
+
+	( echo "$NAME: Release Notes for $INSTALL_TO:t:r ($LATEST_VERSION/$LATEST_BUILD):"
+	curl -sfLS $XML_FEED \
+	| awk '/<description>/{i++}i==2' \
+	| sed -e '/<pubDate>/,$d' -e 's#\<\!\[CDATA\[##g' -e 's#\]\]\>##g' \
+	| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin) \
+	| tee "$FILENAME:r.txt"
+
+fi
 
 echo "$NAME: Downloading $URL to $FILENAME"
 
-curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$URL"
+curl --continue-at - --fail --location --output "$FILENAME" "$URL"
 
 EXIT="$?"
 
 	## exit 22 means 'the file was already fully downloaded'
 [ "$EXIT" != "0" -a "$EXIT" != "22" ] && echo "$NAME: Download of $URL failed (EXIT = $EXIT)" && exit 0
 
-
-
-if [ -e "$INSTALL_TO" ]
+if [[ -e "$INSTALL_TO" ]]
 then
 		# Quit app, if running
 	pgrep -xq "Hocus Focus" \
 	&& LAUNCH='yes' \
 	&& osascript -e 'tell application "Hocus Focus" to quit'
 
-		# move installed version to trash 
+		# move installed version to trash
 	mv -vf "$INSTALL_TO" "$HOME/.Trash/Hocus Focus.$INSTALLED_VERSION.app"
 fi
 
@@ -90,9 +128,9 @@ EXIT="$?"
 if [ "$EXIT" = "0" ]
 then
 	echo "$NAME: Installation of $INSTALL_TO was successful."
-	
+
 	[[ "$LAUNCH" == "yes" ]] && open -a "$INSTALL_TO"
-	
+
 else
 	echo "$NAME: Installation of $INSTALL_TO failed (\$EXIT = $EXIT)\nThe downloaded file can be found at $FILENAME."
 fi

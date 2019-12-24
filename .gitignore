@@ -1,4 +1,7 @@
 .DS_Store
 di.lst
-di-phoneview.sh
-di-finereader.sh
+*-private.sh
+@TODO-*
+/@TODO.txt
+.sync
+Icon

@@ -5,6 +5,9 @@
 # Mail:	luomat at gmail dot com
 # Date:	2016-05-13
 
+## This keeps running on its own, so I have to do this to stop it
+#exit 0
+
 NAME="$0:t:r"
 
 if [ -e "$HOME/.path" ]
@@ -18,39 +21,111 @@ zmodload zsh/datetime
 
 LOG="$HOME/Library/Logs/$NAME.log"
 
-[[ -e "$LOG" ]] 	|| touch "$LOG"				# Create log file if needed 
+EXPLAIN_USAGE='no'
 
-function timestamp { strftime "%Y-%m-%d at %H:%M:%S" "$EPOCHSECONDS" }
+LAUNCH_APPS='no'
+
+po.sh "$NAME started"
+
+	# Delete (old) log if it exists already
+# [[ -e "$LOG" ]] 	|| rm -f "$LOG"
+
+function timestamp { strftime "%Y-%m-%d at %-l:%M:%S %p" "$EPOCHSECONDS" }
+
 function log { echo "$NAME [`timestamp`]: $@" | tee -a "$LOG" }
 
-# chdir to the directory where this script is found 
+function launch_apps {
+
+		# Show updates in the Mac App Store app:
+	open 'macappstore://showUpdatesPage'
+
+		# Check for common updaters:
+	for APP in \
+		'/Library/Application Support/Microsoft/MAU2.0/Microsoft AutoUpdate.app' \
+		'/Applications/MacUpdate Desktop.app' \
+		'/Applications/MacUpdater.app'
+	do
+		EXPLAIN_USAGE='yes'
+
+		if [[ -e "$APP" ]]
+		then
+			echo "$NAME: Launching $APP:t"
+			open -g -a "$APP:t"
+		fi
+
+	done
+}
+
+for ARGS in "$@"
+do
+	case "$ARGS" in
+		-a|--all)
+				LAUNCH_APPS='yes'
+				shift
+		;;
+
+		-A|--apps|-g|--gui)
+					# JUST launch the GUI apps, don't run the di- scripts
+				launch_apps
+
+				echo "$NAME: Done!"
+
+				exit 0
+		;;
+
+		-*|--*)
+				echo "	$NAME [warning]: Don't know what to do with arg: $1"
+				shift
+		;;
+
+	esac
+
+done # for args
+
+# chdir to the directory where this script is found
 cd "$0:h"
 
 COUNT='0'
 
 log "---------- STARTING AT `timestamp` ---------- "
 
-# If di-auto.sh hasn't created a list, run it now.
-[[ -e ./di.lst ]] || ./di-auto.sh
-while read INSTALLED
+##
+## Get a list of all of the 'di-*.sh' files (be sure to exclude this script (di-all.sh) or else it'll go on forever)
+##
+
+command ls -1 di-*sh \
+| egrep -v '(di-all.sh|di-auto.sh)' \
+| while read line
 do
 
-		# If the name of the script being run is not the same as the name of this script
-		# then...
-	if [ "$INSTALLED" != "$0:t" ]
-	then
-		log "Running $INSTALLED"
+	log "Running $line"
 
-		((COUNT++))
+	((COUNT++))
 
-		$INSTALLED  2>&1 | tee -a "$LOG"
-	fi 
-done < ./di.lst
+	"${line}" 2>&1 | tee -a "$LOG"
+
+done
+
+log "---------- FINISHED AT `timestamp` after checking $COUNT apps ---------- "
+
+echo "$NAME last ran: `timestamp`. ${COUNT} apps were checked." >| "$HOME/.$NAME.lastrun.log"
+
+exit 0
 
 
-echo "Last run at `timestamp` when $COUNT apps were checked." >| "$HOME/.$NAME.lastrun.log"
 
-log "---------- FINISHED AT `timestamp` ---------- "
+
+
+
+if [[ "$LAUNCH_APPS" == 'yes' ]]
+then
+	launch_apps
+else
+		# Explain how to launch GUI updaters, if any are found.
+
+	[[ "$EXPLAIN_USAGE" = "yes" ]] \
+	&& echo "\n$NAME: use '$0 --apps' to _just_ launch GUI updater apps,\n	or '$0 --all' to use both di- scripts _and_ GUI updaters."
+fi
 
 exit 0
 #EOF

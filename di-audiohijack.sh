@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env zsh -f
 # Purpose: Download and install Audio Hijack 3
 #
 # From:	Tj Luo.ma
@@ -10,94 +10,184 @@ NAME="$0:t:r"
 
 INSTALL_TO='/Applications/Audio Hijack.app'
 
+HOMEPAGE="https://www.rogueamoeba.com/audiohijack/"
+
+DOWNLOAD_PAGE="https://rogueamoeba.com/audiohijack/download.php"
+
+SUMMARY="Record any application’s audio, including VoIP calls from Skype, web streams from Safari, and much more. Save audio from hardware devices like microphones and mixers as well. You can even record all the audio heard on your Mac at once! If you can hear it, Audio Hijack can record it."
+
+if [ -e "$HOME/.path" ]
+then
+	source "$HOME/.path"
+else
+	PATH=/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin
+fi
+
 zmodload zsh/datetime
-
-TIME=$(strftime "%Y-%m-%d-at-%H.%M.%S" "$EPOCHSECONDS")
-
-HOST=`hostname -s`
-HOST="$HOST:l"
-
-LOG="$HOME/Library/Logs/metalog/$NAME/$HOST/$TIME.log"
-
-[[ -d "$LOG:h" ]] || mkdir -p "$LOG:h"
-[[ -e "$LOG" ]]   || touch "$LOG"
 
 function timestamp { strftime "%Y-%m-%d at %H:%M:%S" "$EPOCHSECONDS" }
 
-function log { echo "$NAME [`timestamp`]: $@" | tee -a "$LOG" }
+OS_VER=$(sw_vers -productVersion | tr -d '.')
 
-URL="http://rogueamoeba.net/ping/versionCheck.cgi?format=sparkle&bundleid=com.rogueamoeba.audiohijack3&system=1011&platform=osx&arch=x86_64&version=21098000"
+XML_FEED="https://rogueamoeba.net/ping/versionCheck.cgi?format=sparkle&bundleid=com.rogueamoeba.audiohijack3&system=$OS_VER&platform=osx&arch=x86_64&version=3548000"
 
-LATEST_VERSION=`curl -sfL "$URL" | awk -F'"' '/sparkle:version=/{print $2}'`
+	# sparkle:version= is the only version information in feed
+LATEST_VERSION=`curl -sfL "$XML_FEED" | awk -F'"' '/sparkle:version=/{print $2}'`
+
+	## could hard-code 'https://rogueamoeba.com/audiohijack/download/AudioHijack.zip' but I'm not
+URL=$(curl -sfL "${DOWNLOAD_PAGE}" | tr '"' '\012' | egrep '^https:.*\.zip$' | head -1)
+
+if [[ "$URL" == "" ]]
+then
+	echo "$NAME: URL is empty"
+	exit 1
+fi
+
+	# If any of these are blank, we should not continue
+if [ "$LATEST_VERSION" = "" -o "$XML_FEED" = "" ]
+then
+	echo "$NAME: Error: bad data received:
+	LATEST_VERSION: $LATEST_VERSION
+	XML_FEED: $XML_FEED
+	"
+
+	exit 1
+fi
 
 if [ -d "$INSTALL_TO" ]
 then
 	INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleVersion 2>/dev/null || echo 0`
-else
-	INSTALLED_VERSION='0'
-fi
 
- if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
- then
- 	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
- 	exit 0
- fi
-
-autoload is-at-least
-
- is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
- 
- if [ "$?" = "0" ]
- then
- 	echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
- 	exit 0
- fi
-
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
-
-DL_URL=`curl -sfL 'http://rogueamoeba.com/audiohijack/download.php' | awk -F'"' '/http.*zip/{print $2}'`
-
-if [[ "$DL_URL" == "" ]]
-then
-	log "DL_URL is empty"
-	exit 0
-fi
-
-for TEST_DIR in \
-	"$HOME/Sites/iusethis.luo.ma/audiohijack" \
-	"/Volumes/Drobo2TB/MacMiniColo/Data/Websites/iusethis.luo.ma/audiohijack" \
-	"$HOME/Downloads"
-do
-	if [ -d "$TEST_DIR" ]
+	if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
 	then
-		export DIR="$TEST_DIR"
-		break
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
+		exit 0
 	fi
-done
 
-FILENAME="$DIR/AudioHijack-${LATEST_VERSION}.zip"
+	autoload is-at-least
 
-echo "$NAME: Downloading $DL_URL\nto\n$FILENAME:"
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
 
-curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$DL_URL"
+	if [ "$?" = "0" ]
+	then
+		echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
+		exit 0
+	fi
 
-function get-pid { export PID=`pgrep -x 'Audio Hijack' || echo ` }
+	echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
+fi
 
-get-pid
+FILENAME="$HOME/Downloads/AudioHijack-${LATEST_VERSION}.zip"
 
-while [ "$PID" != "" ]
-do
-	echo "$NAME: $INSTALL_TO:t is running (PID: $PID). Quit to continue. Sleeping 30 seconds from `timestamp`."
-	sleep 30
-	get-pid
-done
+if (( $+commands[lynx] ))
+then
+
+	RELEASE_NOTES_URL="$XML_FEED"
+
+	RELEASE_NOTES=$(curl -sfL "$RELEASE_NOTES_URL" \
+		| sed '1,/<body>/d; /<\/body>/,$d' \
+		| egrep -i '[a-z]|[0-9]' \
+		| lynx -dump -nomargins -width=10000 -assume_charset=UTF-8 -pseudo_inlines -stdin)
+
+	echo "${RELEASE_NOTES}\nSource: ${RELEASE_NOTES_URL}\nURL: ${URL}" | tee "$FILENAME:r.txt"
+
+fi
+
+echo "$NAME: Downloading '$URL' to '$FILENAME':"
+
+curl --continue-at - --fail --location --output "$FILENAME" "$URL"
+
+EXIT="$?"
+
+	## exit 22 means 'the file was already fully downloaded'
+[ "$EXIT" != "0" -a "$EXIT" != "22" ] && echo "$NAME: Download of $URL failed (EXIT = $EXIT)" && exit 0
+
+[[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
+
+[[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
+
+(cd "$FILENAME:h" ; echo "\nLocal sha256:" ; shasum -a 256 -p "$FILENAME:t" ) >>| "$FILENAME:r.txt"
+
+	## make sure that the .zip is valid before we proceed
+(command unzip -l "$FILENAME" 2>&1 )>/dev/null
+
+EXIT="$?"
+
+if [ "$EXIT" = "0" ]
+then
+	echo "$NAME: '$FILENAME' is a valid zip file."
+
+else
+	echo "$NAME: '$FILENAME' is an invalid zip file (\$EXIT = $EXIT)"
+
+	mv -fv "$FILENAME" "$HOME/.Trash/"
+
+	mv -fv "$FILENAME:r".* "$HOME/.Trash/"
+
+	exit 0
+
+fi
+
+	## unzip to a temporary directory
+UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
+
+echo "$NAME: Unzipping '$FILENAME' to '$UNZIP_TO':"
+
+ditto -xk --noqtn "$FILENAME" "$UNZIP_TO"
+
+EXIT="$?"
+
+if [[ "$EXIT" == "0" ]]
+then
+	echo "$NAME: Unzip successful"
+else
+		# failed
+	echo "$NAME failed (ditto -xkv '$FILENAME' '$UNZIP_TO')"
+
+	exit 1
+fi
 
 if [[ -e "$INSTALL_TO" ]]
 then
-	mv -vn "$INSTALL_TO" "$HOME/.Trash/Audio Hijack.$INSTALLED_VERSION.app"
+
+	pgrep -xq "$INSTALL_TO:t:r" \
+	&& echo "$NAME: '$INSTALL_TO:t' is running. Not replacing it." \
+	&& exit 1
+
+	echo "$NAME: Moving existing (old) '$INSTALL_TO' to '$HOME/.Trash/'."
+
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
+
+	EXIT="$?"
+
+	if [[ "$EXIT" != "0" ]]
+	then
+
+		echo "$NAME: failed to move existing $INSTALL_TO to $HOME/.Trash/"
+
+		exit 1
+	fi
 fi
 
-ditto -xk -v --rsrc --extattr --noqtn "$FILENAME" "$INSTALL_TO:h"
+echo "$NAME: Moving new version of '$INSTALL_TO:t' (from '$UNZIP_TO') to '$INSTALL_TO'."
+
+	# Move the file out of the folder
+mv -vn "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
+
+EXIT="$?"
+
+if [[ "$EXIT" = "0" ]]
+then
+
+	echo "$NAME: Successfully installed '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
+
+else
+	echo "$NAME: Failed to move '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
+
+	exit 1
+fi
+
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
 exit 0
 #

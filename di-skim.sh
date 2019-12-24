@@ -1,12 +1,21 @@
 #!/bin/zsh -f
-# Purpose: 
+# Purpose: Download and install the latest version of Skim from <https://skim-app.sourceforge.io>
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
 # Date:	2016-06-02
 
 NAME="$0:t:r"
-APPNAME="Skim"
+
+INSTALL_TO="/Applications/Skim.app"
+
+HOMEPAGE="https://skim-app.sourceforge.io"
+
+DOWNLOAD_PAGE="https://skim-app.sourceforge.io"
+
+SUMMARY="Skim is a PDF reader and note-taker for OS X. It is designed to help you read and annotate scientific papers in PDF, but is also great for viewing any PDF file. Stop printing and start skimming."
+
+XML_FEED="http://skim-app.sourceforge.net/skim.xml"
 
 if [ -e "$HOME/.path" ]
 then
@@ -15,83 +24,145 @@ else
 	PATH='/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin'
 fi
 
+<<<<<<< HEAD
 INSTALL_TO="/Applications/$APPNAME.app"
 
 INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo '0'`
 BUILD_NUMBER=`defaults read "$INSTALL_TO/Contents/Info" CFBundleVersion 2>/dev/null || echo 600000`
 FEED_URL="https://skim-app.sourceforge.io/skim.xml"
+=======
+INFO=($(curl -sfL "$XML_FEED" \
+	| tr -s ' ' '\012' \
+	| egrep 'sparkle:version=|sparkle:shortVersionString=|url=' \
+	| head -3 \
+	| sort \
+	| awk -F'"' '/^/{print $2}'))
+>>>>>>> ef550ac4d20617741d2710da1c59f96931c74d6f
 
-INFO=($(curl -sfL "$FEED_URL" \
-| tr -s ' ' '\012' \
-| egrep 'sparkle:shortVersionString=|url=' \
-| head -2 \
-| awk -F'"' '/^/{print $2}'))
-
-URL="$INFO[2]"
 LATEST_VERSION="$INFO[1]"
+LATEST_BUILD="$INFO[2]"
+URL="$INFO[3]"
 
 	# If any of these are blank, we should not continue
-if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$URL" = "" ]
+if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
 then
-	echo "$NAME: Error: bad data received:\nINFO: $INFO"
-	exit 0
+	echo "$NAME: Error: bad data received:
+	INFO: $INFO
+	LATEST_VERSION: $LATEST_VERSION
+	LATEST_BUILD: $LATEST_BUILD
+	URL: $URL
+	"
+
+	exit 1
 fi
 
- if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
- then
- 	echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
- 	exit 0
- fi
+if [[ -e "$INSTALL_TO" ]]
+then
 
-autoload is-at-least
+	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
 
- is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
- 
- if [ "$?" = "0" ]
- then
- 	echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
- 	exit 0
- fi
+	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
 
-echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
+	autoload is-at-least
 
-FILENAME="$HOME/Downloads/${APPNAME//[[:space:]]/}-$LATEST_VERSION.dmg"
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
 
-echo "$NAME: Downloading $URL to $FILENAME"
+	VERSION_COMPARE="$?"
 
-curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$URL"
+	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
+
+	BUILD_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
+	then
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
+		exit 0
+	fi
+
+	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
+
+	FIRST_INSTALL='no'
+
+else
+
+	FIRST_INSTALL='yes'
+fi
+
+FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}_${LATEST_BUILD}.dmg"
+
+if (( $+commands[lynx] ))
+then
+
+	RELEASE_NOTES_URL="http://skim-app.sourceforge.net/skim.xml"
+
+	( echo "$NAME: Release Notes for $INSTALL_TO:t:r:" ;
+	curl -sSfL "$RELEASE_NOTES_URL" \
+	| sed '1,/CDATA/d; /<\/description>/,$d' \
+	| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin ;
+	echo "\nSource: XML_FEED <$RELEASE_NOTES_URL>" ) | tee "$FILENAME:r.txt"
+fi
+
+if [[ -e "$FILENAME" ]]
+then
+
+	echo "$NAME: '$FILENAME' already exists. Assuming it's fully downloaded, as server does not support resuming downloads."
+
+else
+
+	echo "$NAME: Downloading '$URL' to '$FILENAME':"
+
+	curl --continue-at - --fail --location --output "$FILENAME" "$URL"
+
+	EXIT="$?"
+
+		## exit 22 means 'the file was already fully downloaded'
+	[ "$EXIT" != "0" -a "$EXIT" != "22" ] && echo "$NAME: Download of $URL failed (EXIT = $EXIT)" && exit 0
+
+	[[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
+
+	[[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
+
+fi
+
+echo "$NAME: Mounting $FILENAME:"
 
 MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
-		| fgrep -A 1 '<key>mount-point</key>' \
-		| tail -1 \
-		| sed 's#</string>.*##g ; s#.*<string>##g')
+	| fgrep -A 1 '<key>mount-point</key>' \
+	| tail -1 \
+	| sed 's#</string>.*##g ; s#.*<string>##g')
+
+if [[ "$MNTPNT" == "" ]]
+then
+	echo "$NAME: MNTPNT is empty"
+	exit 1
+fi
 
 if [ -e "$INSTALL_TO" ]
 then
-	pgrep -qx "$APPNAME" && LAUNCH='yes' && killall "$APPNAME"
-	mv -f "$INSTALL_TO" "$HOME/.Trash/$APPNAME.$INSTALLED_VERSION.app"
+	pgrep -qx "$INSTALL_TO:t:r" && LAUNCH='yes' && killall "$INSTALL_TO:t:r"
+	mv -f "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
 fi
 
-echo "$NAME: Installing $FILENAME to $INSTALL_TO:h/"
+echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
 
-# ditto --noqtn -xk "$FILENAME" "$INSTALL_TO:h/"
-
-ditto "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
+ditto --noqtn -v "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
 
 EXIT="$?"
 
-if [ "$EXIT" = "0" ]
+if [[ "$EXIT" == "0" ]]
 then
-	echo "$NAME: Installation of $INSTALL_TO was successful."
-	
-	[[ "$LAUNCH" == "yes" ]] && open -a "$INSTALL_TO"
-	
+	echo "$NAME: Successfully installed $INSTALL_TO"
 else
-	echo "$NAME: Installation of $INSTALL_TO failed (\$EXIT = $EXIT)\nThe downloaded file can be found at $FILENAME."
+	echo "$NAME: ditto failed"
+
+	exit 1
 fi
+
+echo "$NAME: Unmounting $MNTPNT:"
 
 diskutil eject "$MNTPNT"
 
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
 exit 0
 #EOF
