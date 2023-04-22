@@ -1,17 +1,13 @@
-#!/usr/bin/env zsh -f
+#!/bin/zsh -f
 # Purpose: Download and install latest version of Kaleidoscope
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
 # Date:	2016-03-19
 
-[[ -e "$HOME/.path" ]] && source "$HOME/.path"
-
-[[ -e "$HOME/.config/di/defaults.sh" ]] && source "$HOME/.config/di/defaults.sh"
-
-INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Kaleidoscope.app"
-
 NAME="$0:t:r"
+
+INSTALL_TO='/Applications/Kaleidoscope.app'
 
 HOMEPAGE="https://www.kaleidoscopeapp.com"
 
@@ -19,17 +15,24 @@ DOWNLOAD_PAGE="https://www.kaleidoscopeapp.com/download"
 
 SUMMARY="Kaleidoscope is the world’s most powerful file comparison app. Compare different text files, images, and folders. Review and merge changes in a matter of seconds."
 
-## 2020-08-04 - this seems to be no longer in use and the SSL certificate expired
-# XML_FEED="https://updates.blackpixel.com/updates?app=ks"
+if [ -e "$HOME/.path" ]
+then
+	source "$HOME/.path"
+else
+	PATH=/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin
+fi
 
-XML_FEED='https://updates.kaleidoscope.app/v3/prod/appcast'
+XML_FEED="https://updates.kaleidoscope.app/v3/prod/appcast"
 
 INFO=($(curl -sSfL "$XML_FEED" \
-		| tr -s ' ' '\012' \
-		| egrep 'sparkle:shortVersionString=|sparkle:version=|url=' \
+		| tr -s ' ' '\n' \
+		| egrep '(sparkle:shortVersionString|url=|sparkle:version)' \
 		| head -3 \
 		| sort \
-		| awk -F'"' '/^/{print $2}'))
+		| tr '>' '"' \
+		| awk -F'"' '/^/{print $2}' \
+		| tr '<' '"' \
+		| awk -F'"' '/^/{print $1}'))
 
 	# "Sparkle" will always come before "url" because of "sort"
 LATEST_VERSION="$INFO[1]"
@@ -97,11 +100,12 @@ then
 
 	RELEASE_NOTES_URL="$XML_FEED"
 
-	(echo -n "$NAME: Release Notes\n\n" ;
-	curl -sfLS "$RELEASE_NOTES_URL" \
-	| sed '1,/<description>/d; /<\/description>/,$d' \
-	| lynx -dump -width='10000' -display_charset=UTF-8 -assume_charset=UTF-8 -pseudo_inlines -stdin -nomargins \
-	; echo "\nSource: XML_FEED <$XML_FEED>" ) | tee "$FILENAME:r.txt"
+	(echo -n "$NAME: Release Notes for " ;
+	curl -sfL "$XML_FEED" \
+	| sed '1,/<item>/d; /<\/description>/,$d ; s#<!\[CDATA\[##g ; s#\]\]>##g' \
+	| lynx -dump -nomargins -width=10000 -assume_charset=UTF-8 -pseudo_inlines -stdin \
+	| sed '/./,/^$/!d' ;
+	echo "\nSource: XML_FEED <$XML_FEED>" ) | tee "$FILENAME:r.txt"
 
 fi
 
@@ -117,18 +121,6 @@ EXIT="$?"
 [[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
-
-egrep -q '^Local sha256:$' "$FILENAME:r.txt" 2>/dev/null
-
-EXIT="$?"
-
-if [ "$EXIT" = "1" -o ! -e "$FILENAME:r.txt" ]
-then
-	(cd "$FILENAME:h" ; \
-	echo "\n\nLocal sha256:" ; \
-	shasum -a 256 "$FILENAME:t" \
-	)  >>| "$FILENAME:r.txt"
-fi
 
 UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
 
