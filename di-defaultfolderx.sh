@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh -f
+#!/bin/zsh -f
 # Purpose: Download and install the latest version of Default Folder X
 #
 # From:	Timothy J. Luoma
@@ -15,9 +15,11 @@ DOWNLOAD_PAGE="https://www.stclairsoft.com/cgi-bin/dl.cgi?DX"
 
 SUMMARY="Make your Open and Save dialogs work as quickly as you do."
 
-if [[ -e "$HOME/.path" ]]
+if [ -e "$HOME/.path" ]
 then
 	source "$HOME/.path"
+else
+	PATH='/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin'
 fi
 
 	# if you want to install beta releases
@@ -119,7 +121,7 @@ else
 	fi
 
 	INFO=($(curl -sfL -A "$UA" "$XML_FEED" \
-			 | tr -s ' ' '\012' \
+			 | tr -s ' \t' '\n' \
 			 | egrep '^(sparkle:shortVersionString|url|sparkle:version)=' \
 			 | sort \
 			 | head -3 \
