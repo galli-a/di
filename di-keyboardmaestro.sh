@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh -f
+#!/bin/zsh -f
 # Purpose: Download and install the latest version of Keyboard Maestro from <http://www.keyboardmaestro.com> (including betas, if enabled)
 #
 # From:	Timothy J. Luoma
@@ -10,6 +10,8 @@ NAME="$0:t:r"
 if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
+else
+	PATH='/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin'
 fi
 
 BETAS_ENABLED=$(defaults read com.stairways.keyboardmaestro.engine CheckForBetas 2>/dev/null)
@@ -66,14 +68,16 @@ then
 
 		# note that we are removing '.' from the version info, which is unusual but necessary given LATEST_VERSION formatting
 	INSTALLED_VERSION=$(defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString | tr -d '.')
+	# pad on the right with zeros (up to length of 4 characters) to cope with version numbers with 2 digits before the first dot
+	INSTALLED_VERSION=${(r{4}{0})INSTALLED_VERSION}
 
 	if [[ "$INSTALLED_VERSION" == "$LATEST_VERSION" ]]
 	then
-		echo "$NAME: Up-To-Date (both are $INSTALLED_VERSION)"
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
 		exit 0
 	fi
 
-	echo "$NAME: Outdated: $INSTALLED_VERSION (local) vs $LATEST_VERSION (new)"
+	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
 
 	FIRST_INSTALL='no'
 
@@ -114,7 +118,7 @@ else
 	exit 1
 fi
 
-(cd "$FILENAME:h" ; echo "\nLocal sha256:" ; shasum -a 256 "$FILENAME:t" ) >>| "$FILENAME:r.txt"
+(cd "$FILENAME:h" ; echo "\nLocal sha256:" ; shasum -a 256 -p "$FILENAME:t" ) >>| "$FILENAME:r.txt"
 
 UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
 
