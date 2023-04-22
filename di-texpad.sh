@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh -f
+#!/bin/zsh -f
 # Purpose: Download and install the latest version of Texpad
 #
 # From:	Timothy J. Luoma
@@ -17,9 +17,11 @@ DOWNLOAD_PAGE="https://www.texpad.com/osx"
 
 SUMMARY="Texpad is a LaTeX editor designed for fast navigation around projects of all sizes. Given a single LaTeX root file, it will read through the LaTeX source, and that of all included files to present you with an outline of your project. Similarly Texpad reads the LaTeX console output, finding errors, and presenting them in a table you can use to jump straight to the errors in the LaTeX source."
 
-if [[ -e "$HOME/.path" ]]
+if [ -e "$HOME/.path" ]
 then
 	source "$HOME/.path"
+else
+	PATH='/usr/local/scripts:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin'
 fi
 
 # NOTE: This is a very unusual case. Rather than including the CFBundleShortVersionString in a 'sparkle:shortVersionString' field
@@ -27,11 +29,13 @@ fi
 # AND we need to skip the _first_ '<title>' because it is the <title> of the feed itself, whereas we want the
 # <title> of the first _entry_ in the feed
 
-IFS=$'\n' INFO=($(curl -sfL "$XML_FEED" \
-		| fgrep -vi '<title>Texpad</title>' \
+INFO=($(curl -sfL "$XML_FEED" \
+		| fgrep -vi '<title>Texifier</title>' \
 		| egrep '<title>.*</title>|sparkle:version=|url=' \
 		| head -3 \
-		| sed 's#^[ 	]*##g' \
+		| tr -s ' \t' '\n' \
+		| fgrep -vi '<' \
+		| awk NF \
 		| sort ))
 
 ## We end up with 3 lines, which should look something like this:
@@ -42,12 +46,12 @@ IFS=$'\n' INFO=($(curl -sfL "$XML_FEED" \
 ## remove that from the LATEST_VERSION information, and _then_ we can get the LATEST_VERSION
 ## info by removing everything except digits and any literal '.'
 
-URL=`echo "$INFO[1]" | sed 's#<enclosure url="##g ; s#"##g;'`
+URL=`echo "$INFO[3]" | sed 's#url="##g ; s#"##g;'`
 
-LATEST_BUILD=`echo "$INFO[3]" | tr -dc '[0-9]'`
+LATEST_BUILD=`echo "$INFO[2]" | tr -dc '[0-9]'`
 
 	# Make sure we get LATEST_BUILD _before_ we try to get this
-LATEST_VERSION=`echo "$INFO[2]" | sed "s#\(${LATEST_BUILD}\)##g;" | tr -dc '[0-9]\.'`
+LATEST_VERSION=`echo "$INFO[1]" | sed "s#\(${LATEST_BUILD}\)##g;" | tr -dc '[0-9]\.'`
 
 	# If any of these are blank, we should not continue
 if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
