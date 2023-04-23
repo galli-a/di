@@ -24,28 +24,41 @@ STATIC_RELEASE_URL='https://github.com/obsidianmd/obsidian-releases/releases/lat
 	# such as 'https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.0.2'
 ACTUAL_RELEASE_URL=$(curl --head -sfLS "$STATIC_RELEASE_URL" | awk -F' |\r' '/^.ocation:/{print $2}' | tail -1)
 
+    # follow actual link containing lists of assets
+ASSETS_URL=$(curl -sfLS "$ACTUAL_RELEASE_URL" | tr '"' '\n' | grep 'expanded_assets')
+
 	# We can find the version number by looking at the end of the URL
 	# and throwing away everything except numbers and periods
 LATEST_VERSION=$(echo "$ACTUAL_RELEASE_URL:t" | tr -dc '[0-9]\.')
 
 	# 2021-01-21 - DMG is now a universal binary
-DOWNLOAD_SUFFIX=$(curl -sfLS "$ACTUAL_RELEASE_URL" | tr '"' '\012' |  egrep -i '^/.*\.dmg$')
+DOWNLOAD_SUFFIX=$(curl -sfLS "$ASSETS_URL" | tr '"' '\n' |  egrep -i '^/.*\.dmg$')
+#DOWNLOAD_SUFFIX=$(curl -sfLS "$ACTUAL_RELEASE_URL" | tr '"' '\n')
 
 DOWNLOAD_PREFIX='https://github.com'
 
 URL="${DOWNLOAD_PREFIX}${DOWNLOAD_SUFFIX}"
 
 
-## Debugging info, if needed
-# echo "
+# # Debugging info, if needed
+#  echo "
 # ACTUAL_RELEASE_URL
-# >$ACTUAL_RELEASE_URL<
-#
+# $ACTUAL_RELEASE_URL
+# 
+# ASSETS_URL
+# $ASSETS_URL
+# 
 # LATEST_VERSION
-# >$LATEST_VERSION<
-#
+# $LATEST_VERSION
+# 
+# DOWNLOAD PREFIX
+# $DOWNLOAD_PREFIX
+# 
+# DOWNLOAD SUFFIX
+# $DOWNLOAD_SUFFIX
+# 
 # URL
-# >$URL<
+# $URL
 # "
 
 	# If any of these are blank, we cannot continue
