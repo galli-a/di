@@ -21,7 +21,7 @@ SUMMARY="Fast & lossless audio editing With Fission, audio editing is no longer 
 
 RELEASE_NOTES_URL="https://www.rogueamoeba.com/fission/releasenotes.php"
 
-OS_MAJOR_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion | cut -d. -f2)
+OS_MAJOR_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion | cut -d. -f1)
 
 if [[ "$OS_MAJOR_VER" -ge "12" ]]
 then
@@ -49,7 +49,7 @@ then
 	fi
 
 		# Try to parse the download URL from the download page
-	URL=`curl -sfL 'http://www.rogueamoeba.com/fission/download.php' | tr '"' '\012' | egrep '\.(zip)$' | head -1`
+	URL=`export LC_CTYPE=C; curl -sfL 'http://www.rogueamoeba.com/fission/download.php' | tr '"' '\012' | egrep '\.(zip)$' | head -1`
 
 		# if we didn't get anything, fall back to this
 	[[ "$URL" == "" ]] && URL='http://rogueamoeba.com/fission/download/Fission.zip'
