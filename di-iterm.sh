@@ -56,7 +56,7 @@ else
 fi
 
 OS_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion | cut -d. -f1)
-echo $OS_VER
+
 if [ "$OS_VER" -ge "12" ]
 then
 
