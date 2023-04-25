@@ -15,7 +15,12 @@ INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Raycast.app"
 
 URL='https://api.raycast.app/v2/download'
 
-LATEST_VERSION=$(curl --head -sfLS "$URL" | egrep -i '^Location: ' | tail -1 | sed -e 's#\.dmg.*##g' -e 's#.*/##g' | tr -dc '[0-9]\.')
+LATEST_VERSION=$(curl --head -sfLS "$URL" \
+	| egrep -i '^Location: ' \
+	| tail -1 \
+	| sed -e 's#\.dmg.*##g' -e 's#.*/##g' \
+	| awk -F '_' '{print $2}' \
+	| tr -dc '[0-9]\.')
 
 if [[ -e "$INSTALL_TO" ]]
 then
