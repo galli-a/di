@@ -14,21 +14,24 @@ fi
 
 # @TODO - this was out of date 2020-03-20
 
-echo "$NAME: Does not work, format of XML_FEED changed"
+#echo "$NAME: Does not work, format of XML_FEED changed"
 
-exit 1
+#exit 1
 
 XML_FEED='https://soulver.app/mac/sparkle/appcast.xml'
 
 INSTALL_TO='/Applications/Soulver 3.app'
 
 INFO=($(curl -sfL "$XML_FEED" \
-	| fgrep -vi 'delta' \
-	| tr ' ' '\012' \
-	| egrep '^(sparkle:version|url|sparkle:shortVersionString)=' \
-	| tail -3 \
-	| sort \
-	| awk -F'"' '//{print $2}'))
+ 	| fgrep -vi 'delta' \
+ 	| tr -s ' \t' '\n' \
+ 	| egrep '^(<sparkle:version>|url=|<sparkle:shortVersionString>)' \
+ 	| head -3 \
+ 	| sort \
+ 	| tr '>' '"' \
+ 	| awk -F'"' '/^/{print $2}' \
+	| tr '<' '"' \
+	| awk -F'"' '/^/{print $1}'))
 
 LATEST_VERSION="$INFO[1]"
 
