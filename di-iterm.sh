@@ -55,8 +55,8 @@ else
 	function die { exit 1 }
 fi
 
-OS_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion | cut -d. -f2)
-
+OS_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion | cut -d. -f1)
+echo $OS_VER
 if [ "$OS_VER" -ge "12" ]
 then
 
@@ -179,7 +179,7 @@ then
 
 	echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
 fi
-
+exit 0
 FILENAME="$HOME/Downloads/${INSTALL_TO:t:r}-${LATEST_VERSION}.zip"
 
 	## Release Notes - start
