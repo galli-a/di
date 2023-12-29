@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh -f
-# Purpose: version 4
+# Purpose: version 5
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
@@ -13,9 +13,9 @@ NAME="$0:t:r"
 
 [[ -e "$HOME/.config/di/defaults.sh" ]] && source "$HOME/.config/di/defaults.sh"
 
-INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Bartender 4.app"
+INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Bartender 5.app"
 
-XML_FEED='https://www.macbartender.com/B2/updates/updatesB4.php'
+XML_FEED='https://www.macbartender.com/B2/updates/AppcastB5.xml'
 
 	# replace newlines, spaces, tabs, with one space
 	# replace everything up to <item>
@@ -27,25 +27,48 @@ XML_FEED='https://www.macbartender.com/B2/updates/updatesB4.php'
 	# egrep to get just the lines we want
 	# use awk to get just the values and not the fields
 
-INFO=($(curl -sfLS "$XML_FEED" \
-	| tr -s '\012| |\t' ' ' \
-	| sed 	-e 's#.*<item>##g' \
-		-e 's#</item>.*##g' \
-		-e 's#> <#>\
-<#g' -e 's# #\
-#g' -e 's#<sparkle:minimumSystemVersion>#sparkle:minimumSystemVersion="#g' \
-		-e 's#</sparkle:minimumSystemVersion>#"#g' \
-		-e 's#<sparkle:releaseNotesLink>#sparkle:releaseNotesLink="#g' \
-		-e 's#</sparkle:releaseNotesLink>#"#g' \
-	| sort \
-	| egrep 'sparkle:version|sparkle:shortVersionString|sparkle:releaseNotesLink|sparkle:minimumSystemVersion|url' \
-	| awk -F'"' '{print $2}' ))
+# INFO=($(curl -sfLS "$XML_FEED" \
+# 	| tr -s '\012| |\t' ' ' \
+# 	| sed 	-e 's#.*<item>##g' \
+# 		-e 's#</item>.*##g' \
+# 		-e 's#> <#>\
+# <#g' -e 's# #\
+# #g' -e 's#<sparkle:minimumSystemVersion>#sparkle:minimumSystemVersion="#g' \
+# 		-e 's#</sparkle:minimumSystemVersion>#"#g' \
+# 		-e 's#<sparkle:releaseNotesLink>#sparkle:releaseNotesLink="#g' \
+# 		-e 's#</sparkle:releaseNotesLink>#"#g' \
+# 	| sort \
+# 	| egrep 'sparkle:version|sparkle:shortVersionString|sparkle:releaseNotesLink|sparkle:minimumSystemVersion|url' \
+# 	| awk -F'"' '{print $2}' ))
 
-MIN_VERSION="$INFO[1]"
-RELEASE_NOTES_URL="$INFO[2]"
-LATEST_VERSION="$INFO[3]"
-LATEST_BUILD="$INFO[4]"
-URL="$INFO[5]"
+INFO=("$(curl -sfLS "$XML_FEED" \
+	| tr -s '\n| |\t' ' ' \
+ 	| sed -e 's#\s*<item>#TKTKTK#g' \
+ 	| sed -e 's#</item>##g' \
+ 	| sed -e 's#TKTKTK#\n#g' \
+ 	| egrep '<title>' \
+ 	| tail -n 1 \
+ 	| tr -s ' ' '\n')")
+
+MIN_VERSION=$(echo "$INFO" \
+	| egrep '<sparkle:minimumSystemVersion>.*</sparkle:minimumSystemVersion>' \
+	| tr -dc '[0-9]\.')
+RELEASE_NOTES_URL=$(echo "$INFO" \
+	| egrep '<sparkle:releaseNotesLink>' \
+	| sed -e 's#<sparkle:releaseNotesLink>##' \
+	| sed -e 's#</sparkle:releaseNotesLink>##')
+LATEST_VERSION=$(echo "$INFO" \
+	| egrep '<sparkle:shortVersionString>' \
+	| sed -e 's#<sparkle:shortVersionString>##' \
+	| sed -e 's#</sparkle:shortVersionString>##')
+LATEST_BUILD=$(echo "$INFO" \
+	| egrep '<sparkle:version>' \
+	| sed -e 's#<sparkle:version>##' \
+	| sed -e 's#</sparkle:version>##')
+URL=$(echo "$INFO" \
+	| egrep 'url' \
+	| sed -e 's#url="##' \
+	| sed -e 's#"##')
 
 	# If any of these are blank, we cannot continue
 if [ "$INFO" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" -o "$LATEST_BUILD" = "" ]
@@ -75,7 +98,7 @@ fi
 
 if [[ -e "$INSTALL_TO" ]]
 then
-
+ 
 	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
 
 	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
@@ -89,7 +112,7 @@ then
 	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
 
 	BUILD_COMPARE="$?"
-
+ 
 	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
 	then
 		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
