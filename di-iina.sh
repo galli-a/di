@@ -17,15 +17,39 @@ INSTALL_TO='/Applications/IINA.app'
 
 XML_FEED='https://www.iina.io/appcast.xml'
 
-INFO=($(curl -sfLS "$XML_FEED" | fgrep '<enclosure url="' | tail -1 | tr '"' ' '))
+INFO=("$(curl -sfLS "$XML_FEED" \
+	| tr -s '\n| |\t' ' ' \
+  	| sed -e 's#\s*<item>#TKTKTK#g' \
+  	| sed -e 's#</item>##g' \
+ 	| sed -e 's#TKTKTK#\n#g' \
+ 	| egrep '<pubDate>' \
+  	| head -n 1 \
+ 	| tr -s ' ' '\n')")
 
-URL=$(echo "$INFO[3]")
+# echo $INFO
 
-LATEST_BUILD=$(echo "$INFO[5]")
+LATEST_VERSION=$(echo "$INFO" \
+	| egrep '<sparkle:shortVersionString>' \
+	| sed -e 's#<sparkle:shortVersionString>##' \
+	| sed -e 's#</sparkle:shortVersionString>##')
+LATEST_BUILD=$(echo "$INFO" \
+	| egrep '<sparkle:version>' \
+	| sed -e 's#<sparkle:version>##' \
+	| sed -e 's#</sparkle:version>##')
+URL=$(echo "$INFO" \
+	| egrep 'url' \
+	| egrep -v 'delta' \
+	| sed -e 's#url="##' \
+	| sed -e 's#"##')
+RELEASE_NOTES_URL=$(echo "$INFO" \
+	| egrep '<sparkle:releaseNotesLink>' \
+	| sed -e 's#<sparkle:releaseNotesLink>##' \
+	| sed -e 's#</sparkle:releaseNotesLink>##')
 
-LATEST_VERSION=$(echo "$INFO[7]")
-
-RELEASE_NOTES_URL="https://www.iina.io/release-note/$LATEST_VERSION.html"
+# echo $LATEST_BUILD
+# echo $LATEST_VERSION
+# echo $URL
+# echo $RELEASE_NOTES_URL
 
 	# If any of these are blank, we cannot continue
 if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
