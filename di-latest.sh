@@ -21,14 +21,48 @@ TEMPFILE="${TMPDIR-/tmp}/${NAME}.${TIME}.$$.$RANDOM.xml"
 
 curl -sfLS "$XML_FEED" > "$TEMPFILE"
 
-INFO=($(tr -s ' |\t' '\012' < "$TEMPFILE" \
-		| egrep '^(url|sparkle:version|sparkle:shortVersionString)=' \
-		| sort | awk -F'"' '//{print $2}'))
+INFO=("$(cat "$TEMPFILE" \
+	| tr -s '\n| |\t' ' ' \
+  	| sed -e 's#\s*<item>#TKTKTK#g' \
+  	| sed -e 's#</item>##g' \
+ 	| sed -e 's#TKTKTK#\n#g' \
+ 	| egrep '<pubDate>' \
+  	| head -n 1 \
+ 	| tr -s ' ' '\n')")
 
-LATEST_VERSION="$INFO[1]"
-LATEST_BUILD="$INFO[2]"
-URL="$INFO[3]"
+# echo $INFO
 
+LATEST_VERSION=$(echo "$INFO" \
+	| egrep '<sparkle:shortVersionString>' \
+	| sed -e 's#<sparkle:shortVersionString>##' \
+	| sed -e 's#</sparkle:shortVersionString>##')
+LATEST_BUILD=$(echo "$INFO" \
+	| egrep '<sparkle:version>' \
+	| sed -e 's#<sparkle:version>##' \
+	| sed -e 's#</sparkle:version>##')
+URL=$(echo "$INFO" \
+	| egrep 'url' \
+	| egrep -v 'delta' \
+	| sed -e 's#url="##' \
+	| sed -e 's#"##')
+RELEASE_NOTES_URL=$(echo "$INFO" \
+	| egrep '<sparkle:releaseNotesLink>' \
+	| sed -e 's#<sparkle:releaseNotesLink>##' \
+	| sed -e 's#</sparkle:releaseNotesLink>##')
+
+# echo $LATEST_BUILD
+# echo $LATEST_VERSION
+# echo $URL
+# echo $RELEASE_NOTES_URL
+
+# INFO=($(tr -s ' |\t' '\012' < "$TEMPFILE" \
+# 		| egrep '^(url|sparkle:version|sparkle:shortVersionString)=' \
+# 		| sort | awk -F'"' '//{print $2}'))
+# 
+# LATEST_VERSION="$INFO[1]"
+# LATEST_BUILD="$INFO[2]"
+# URL="$INFO[3]"
+# 
 if [[ -e "$INSTALL_TO" ]]
 then
 
@@ -49,7 +83,7 @@ then
 	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
 	then
 		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
-		exit 0
+# 		exit 0 TKTKTK
 	fi
 
 	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
@@ -62,7 +96,7 @@ else
 fi
 
 FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.zip"
-
+# echo $FILENAME
 if (( $+commands[lynx] ))
 then
 
@@ -71,7 +105,7 @@ then
 	| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin ; \
 	  echo "\nRelease Notes: ${XML_FEED}\nURL: $URL" ) \
 	| tee "$FILENAME:r.txt"
-
+	
 fi
 
 echo "$NAME: Downloading '$URL' to '$FILENAME':"
