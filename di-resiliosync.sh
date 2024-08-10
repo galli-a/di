@@ -76,9 +76,11 @@ fi
 if [ -e "$INSTALL_TO" ]
 then
 	INSTALLED_VERSION=`defaults read $INSTALL_TO/Contents/Info CFBundleShortVersionString 2>/dev/null || echo 0`
+	INSTALLED_BUILD=`$INSTALL_TO/Contents/MacOS/Resilio\ Sync --help | grep -e '(' | head -n 1 | cut -d "(" -f2 | cut -d ")" -f1`
 else
 	INSTALLED_VERSION='0'
 fi
+INSTALLED_VERSION=${INSTALLED_VERSION}'.'${INSTALLED_BUILD}
 
 if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
 then
