@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose:
+# Purpose: 	Download and install the latest version of Raycast (https://www.raycast.com)
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2021-03-15
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2021-03-15
+# Verified:	2025-02-23
 
 NAME="$0:t:r"
 
@@ -15,12 +16,24 @@ INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Raycast.app"
 
 URL='https://api.raycast.app/v2/download'
 
-LATEST_VERSION=$(curl --head -sfLS "$URL" \
-	| egrep -i '^Location: ' \
+LATEST_VERSION=$(curl --head -sfLS "$URL" 2>/dev/null \
+	| egrep -i '^location: ' \
 	| tail -1 \
-	| sed -e 's#\.dmg.*##g' -e 's#.*/##g' \
-	| awk -F '_' '{print $2}' \
-	| tr -dc '[0-9]\.')
+	| sed -e 's#.*Raycast_v##g' -e 's#_.*##g')
+
+# If any of these are blank, we cannot continue
+if [ "$URL" = "" -o "$LATEST_VERSION" = "" ]
+then
+	echo "$NAME: Error: bad data received:
+	INFO: $INFO
+	LATEST_VERSION: $LATEST_VERSION
+	LATEST_BUILD: $LATEST_BUILD
+	URL: $URL
+	"  >>/dev/stderr
+	
+	exit 1
+fi
+
 
 if [[ -e "$INSTALL_TO" ]]
 then

@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install BitBar from <https://getbitbar.com>
+# Purpose: 	Download and install latest version of DetectX
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2018-08-10
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2015-12-15
+# Verified:	2025-02-24
 
 if [[ -e "$HOME/.path" ]]
 then
@@ -12,62 +13,69 @@ fi
 
 NAME="$0:t:r"
 
-INSTALL_TO="/Applications/BitBar.app"
+INSTALL_TO='/Applications/DetectX.app'
 
-HOMEPAGE="https://getbitbar.com"
+HOMEPAGE="https://sqwarq.com/detectx/"
 
-DOWNLOAD_PAGE="https://github.com/matryer/bitbar/releases/latest"
+DOWNLOAD_PAGE="https://s3.amazonaws.com/sqwarq.com/PublicZips/DetectX.app.zip"
 
-SUMMARY="Put the output from any script or program in your Mac OS X Menu Bar."
+SUMMARY="DetectX is, rather, a lightweight, on-demand dedicated search and troubleshooting tool that can identify malware, adware, keyloggers, potentially unwanted apps and potentially destabilising apps on a mac. It can also help you (or us, if you consult us), to identify unknown and novel threats through its Profiler and History functions."
 
-STATIC_URL="https://github.com/matryer/bitbar/releases/latest"
+XML_FEED='https://s3.amazonaws.com/sqwarq.com/AppCasts/detectx.xml'
 
-LATEST_URL=$(curl -sfL --head "$STATIC_URL" | awk -F': |\r' '/.ocation/{print $2}' | tail -1)
+INFO=($(curl -sfL "$XML_FEED" \
+		| tr -s ' ' '\012' \
+		| egrep 'sparkle:version=|url=' \
+		| head -2 \
+		| sort \
+		| awk -F'"' '/^/{print $2}'))
 
-LATEST_VERSION=$(echo "$LATEST_URL:t" | tr -dc '[0-9]\.')
+	# "Sparkle" will always come before "url" because of "sort"
+LATEST_VERSION="$INFO[1]"
 
-URL=$(curl -sfL "$LATEST_URL" \
-		| egrep -i '/matryer/bitbar/releases/download/.*\.zip' \
-		| fgrep -vi "bitbardistro" \
-		| awk -F'"' '//{print "https://github.com"$2}')
+URL="$INFO[2]"
+
+if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$URL" = "" ]
+then
+	echo "$NAME: Error: bad data received:
+	INFO: $INFO
+	LATEST_VERSION: $LATEST_VERSION
+	URL: $URL
+	"
+
+	exit 1
+fi
 
 if [[ -e "$INSTALL_TO" ]]
 then
 
-	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
+	INSTALLED_VERSION=`defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo '0'`
 
-	autoload is-at-least
-
-	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
-
-	VERSION_COMPARE="$?"
-
-	if [ "$VERSION_COMPARE" = "0" ]
+	if [[ "$LATEST_VERSION" == "$INSTALLED_VERSION" ]]
 	then
 		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
 		exit 0
 	fi
 
-	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
+	autoload is-at-least
 
-	FIRST_INSTALL='no'
+	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
 
-else
+	if [ "$?" = "0" ]
+	then
+		echo "$NAME: Installed version ($INSTALLED_VERSION) is ahead of official version $LATEST_VERSION"
+		exit 0
+	fi
 
-	FIRST_INSTALL='yes'
+	echo "$NAME: Outdated (Installed = $INSTALLED_VERSION vs Latest = $LATEST_VERSION)"
+
 fi
-
-#echo "
-#LATEST_URL: $LATEST_URL
-#LATEST_VERSION: $LATEST_VERSION
-#URL: $URL
-#"
 
 FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}.zip"
 
 echo "$NAME: Downloading '$URL' to '$FILENAME':"
 
-curl --continue-at - --fail --location --output "$FILENAME" "$URL"
+curl --continue-at - --progress-bar --fail --location --output "$FILENAME" "$URL"
 
 EXIT="$?"
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install Audio Hijack 3
+# Purpose: 	Download and install Audio Hijack 4
 #
-# From:	Tj Luo.ma
-# Mail:	luomat at gmail dot com
-# Web: 	http://RhymesWithDiploma.com
-# Date:	2015-01-20
+# From:		Tj Luo.ma
+# Mail:		luomat at gmail dot com
+# Web: 		http://RhymesWithDiploma.com
+# Date:		2015-01-20
+# Verified:	2025-02-21
 
 [[ -e "$HOME/.path" ]] && source "$HOME/.path"
 
@@ -25,17 +26,16 @@ zmodload zsh/datetime
 
 function timestamp { strftime "%Y-%m-%d at %H:%M:%S" "$EPOCHSECONDS" }
 
-# OS_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion | tr -d '.')
+RELEASE_NOTES_URL='https://www.rogueamoeba.com/support/releasenotes/?product=Audio+Hijack'
 
-# OS_VER='10157'
+	# Web page scraping is the lowest form of life, but it's all we have
+LATEST_VERSION=$(curl -sfLS "$RELEASE_NOTES_URL" \
+	| fgrep 'ra-product="audio-hijack"' \
+	| head -1 \
+	| sed "s#.*<div id='##g; s#' .*##g")
 
-XML_FEED="https://rogueamoeba.net/ping/versionCheck.cgi?format=sparkle&bundleid=com.rogueamoeba.audiohijack3&system=10160&platform=osx&arch=x86_64&version=3762003"
-
-	# sparkle:version= is the only version information in feed
-LATEST_VERSION=`curl -sfL "$XML_FEED" | awk -F'"' '/sparkle:version=/{print $2}'`
-
-	## could hard-code 'https://rogueamoeba.com/audiohijack/download/AudioHijack.zip' but I'm not
-URL=$(curl -sfL "${DOWNLOAD_PAGE}" | tr '"' '\012' | egrep '^https:.*\.zip$' | head -1)
+	## I used to calculate this from the $DOWNLOAD_PAGE but now I don't
+URL='https://rogueamoeba.com/audiohijack/download/AudioHijack.zip'
 
 if [[ "$URL" == "" ]]
 then
@@ -44,11 +44,10 @@ then
 fi
 
 	# If any of these are blank, we should not continue
-if [ "$LATEST_VERSION" = "" -o "$XML_FEED" = "" ]
+if [ "$LATEST_VERSION" = "" ]
 then
 	echo "$NAME: Error: bad data received:
 	LATEST_VERSION: $LATEST_VERSION
-	XML_FEED: $XML_FEED
 	"
 
 	exit 1
@@ -82,12 +81,10 @@ FILENAME="${DOWNLOAD_DIR_ALTERNATE-$HOME/Downloads}/${${INSTALL_TO:t:r}// /}-${$
 if (( $+commands[lynx] ))
 then
 
-	RELEASE_NOTES_URL="$XML_FEED"
-
-	RELEASE_NOTES=$(curl -sfL "$RELEASE_NOTES_URL" \
-		| sed '1,/<body>/d; /<\/body>/,$d' \
-		| egrep -i '[a-z]|[0-9]' \
-		| lynx -dump -nomargins -width=10000 -assume_charset=UTF-8 -pseudo_inlines -stdin)
+	RELEASE_NOTES=$(curl -sfLS "$RELEASE_NOTES_URL" \
+					| sed   -e '1,/ra-product="audio-hijack"/d' \
+							-e '/<!-- end .version-note -->/,$d' \
+					| lynx -dump -nomargins -width=10000 -assume_charset=UTF-8 -pseudo_inlines -stdin)
 
 	echo "${RELEASE_NOTES}\nSource: ${RELEASE_NOTES_URL}\nURL: ${URL}" | tee "$FILENAME:r.txt"
 

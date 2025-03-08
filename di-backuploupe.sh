@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: get the latest https://www.soma-zone.com/BackupLoupe/
+# Purpose: 	get the latest https://www.soma-zone.com/BackupLoupe/
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2019-06-06
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2019-06-06
+# Verified:	2025-02-17
 
 [[ -e "$HOME/.path" ]] && source "$HOME/.path"
 
@@ -66,7 +67,7 @@ else
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.tbz2"
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.txz"
 
 RELEASE_NOTES_TXT="$FILENAME:r.txt"
 

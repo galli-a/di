@@ -1,50 +1,30 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install the latest version of Sublime Text <https://www.sublimetext.com>
+# Purpose: 	Download and install the latest version of Sublime Text
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2018-08-04
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2025-03-03
+# Verified:	2025-03-03
 
 NAME="$0:t:r"
-
-INSTALL_TO='/Applications/Sublime Text.app'
-
-HOMEPAGE="https://www.sublimetext.com"
-
-DOWNLOAD_PAGE="https://www.sublimetext.com/3"
-
-SUMMARY="A sophisticated text editor for code, markup and prose."
-
-XML_FEED="https://www.sublimetext.com/updates/3/stable/appcast_osx.xml"
 
 if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
 fi
 
-# WATCH FOR SPACES IN URL!
-# n.b. That's the only version info in feed
-# No other version info in feed
-IFS=$'\n' INFO=($(curl -sfL "$XML_FEED" \
-	| egrep "<enclosure url=|sparkle:version=" \
-	| sort \
-	| sed 's#.*http#http#g ; s#.*sparkle:version="##g ; s#"##g ; s# #%20#g'))
+[[ -e "$HOME/.config/di/defaults.sh" ]] && source "$HOME/.config/di/defaults.sh"
 
-LATEST_VERSION="$INFO[1]"
+INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Sublime Text.app"
 
-URL="$INFO[2]"
+URL=$(curl -sfLS "https://www.sublimetext.com/download_thanks?target=mac" \
+	| tr '"' '\012'  \
+	| fgrep mac.zip \
+	| head -1)
 
-	# If any of these are blank, we should not continue
-if [ "$URL" = "" -o "$LATEST_VERSION" = "" -o "$INFO" = "" ]
-then
-	echo "$NAME: Error: bad data received:
-	LATEST_VERSION: $LATEST_VERSION
-	URL: $URL
-	INFO: $INFO
-	"
+# https://download.sublimetext.com/sublime_text_build_4192_mac.zip
 
-	exit 1
-fi
+LATEST_VERSION=$(echo "$URL:t:r" | tr -dc '[0-9]')
 
 if [[ -e "$INSTALL_TO" ]]
 then
@@ -67,26 +47,19 @@ then
 
 	FIRST_INSTALL='no'
 
+	if [[ ! -w "$INSTALL_TO" ]]
+	then
+		echo "$NAME: '$INSTALL_TO' exists, but you do not have 'write' access to it, therefore you cannot update it." >>/dev/stderr
+
+		exit 2
+	fi
+
 else
 
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/SublimeText-${LATEST_VERSION}.dmg"
-
-if (( $+commands[lynx] ))
-then
-
-	# alternative: http://www.sublimetext.com/updates/3/stable/release_notes.html
-
-	RELEASE_NOTES_URL='https://www.sublimetext.com/3'
-
-	( echo -n "$NAME: Release Notes for $INSTALL_TO:t:r " ;
-		curl -sfL "${RELEASE_NOTES_URL}" \
-		| sed '1,/<article class="current">/d; /<\/article>/,$d' \
-		| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin ;
-		echo "\nSource: <${RELEASE_NOTES_URL}>" ) | tee "$FILENAME:r.txt"
-fi
+FILENAME="${DOWNLOAD_DIR_ALTERNATE-$HOME/Downloads}/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}.zip"
 
 echo "$NAME: Downloading '$URL' to '$FILENAME':"
 
@@ -94,55 +67,108 @@ curl --continue-at - --fail --location --output "$FILENAME" "$URL"
 
 EXIT="$?"
 
-	## exit 22 means 'the file was already fully downloaded'
+## exit 22 means 'the file was already fully downloaded'
 [ "$EXIT" != "0" -a "$EXIT" != "22" ] && echo "$NAME: Download of $URL failed (EXIT = $EXIT)" && exit 0
 
 [[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
-echo "$NAME: Mounting $FILENAME:"
+egrep -q '^Local sha256:$' "$FILENAME:r.txt" 2>/dev/null
 
-MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
-	| fgrep -A 1 '<key>mount-point</key>' \
-	| tail -1 \
-	| sed 's#</string>.*##g ; s#.*<string>##g')
+EXIT="$?"
 
-if [[ "$MNTPNT" == "" ]]
+if [ "$EXIT" = "1" -o ! -e "$FILENAME:r.txt" ]
 then
-	echo "$NAME: MNTPNT is empty"
-	exit 1
+	(cd "$FILENAME:h" ; \
+		echo "\n\nLocal sha256:" ; \
+		shasum -a 256 "$FILENAME:t" \
+	)  >>| "$FILENAME:r.txt"
 fi
 
-if [[ -e "$INSTALL_TO" ]]
-then
-		# Quit app, if running
-	pgrep -xq "$INSTALL_TO:t:r" \
-	&& LAUNCH='yes' \
-	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
+TEMPDIR=$(mktemp -d "${TMPDIR-/tmp/}${NAME-$0:r}-XXXXXXXX")
 
-		# move installed version to trash
-	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.${INSTALLED_VERSION}_${INSTALLED_BUILD}.app"
+## make sure that the .zip is valid before we proceed
+(command unzip -l "$FILENAME" 2>&1 )>/dev/null
+
+EXIT="$?"
+
+if [ "$EXIT" = "0" ]
+then
+	echo "$NAME: '$FILENAME' is a valid zip file."
+
+else
+	echo "$NAME: '$FILENAME' is an invalid zip file (\$EXIT = $EXIT)"
+
+	mv -fv "$FILENAME" "$TEMPDIR/"
+
+	mv -fv "$FILENAME:r".* "$TEMPDIR/"
+
+	exit 0
+
 fi
 
-echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
+## unzip to a temporary directory
+UNZIP_TO=$(mktemp -d "${TEMPDIR}/${NAME}-XXXXXXXX")
 
-ditto --noqtn -v "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
+echo "$NAME: Unzipping '$FILENAME' to '$UNZIP_TO':"
+
+ditto -xk --noqtn "$FILENAME" "$UNZIP_TO"
 
 EXIT="$?"
 
 if [[ "$EXIT" == "0" ]]
 then
-	echo "$NAME: Successfully installed $INSTALL_TO"
+	echo "$NAME: Unzip successful"
 else
-	echo "$NAME: ditto failed"
+	# failed
+	echo "$NAME failed (ditto -xkv '$FILENAME' '$UNZIP_TO')"
 
 	exit 1
 fi
 
-echo "$NAME: Unmounting $MNTPNT:"
+if [[ -e "$INSTALL_TO" ]]
+then
 
-diskutil eject "$MNTPNT"
+	pgrep -xq "$INSTALL_TO:t:r" \
+	&& LAUNCH='yes' \
+	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
+
+	echo "$NAME: Moving existing (old) '$INSTALL_TO' to '$TEMPDIR/'."
+
+	mv -f "$INSTALL_TO" "$TEMPDIR/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
+
+	EXIT="$?"
+
+	if [[ "$EXIT" != "0" ]]
+	then
+
+		echo "$NAME: failed to move existing '$INSTALL_TO' to '$TEMPDIR'."
+
+		exit 1
+	fi
+fi
+
+echo "$NAME: Moving new version of '$INSTALL_TO:t' (from '$UNZIP_TO') to '$INSTALL_TO'."
+
+# Move the file out of the folder
+mv -n "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
+
+EXIT="$?"
+
+if [[ "$EXIT" = "0" ]]
+then
+
+	echo "$NAME: Successfully installed '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
+
+else
+	echo "$NAME: Failed to move '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
+
+	exit 1
+fi
+
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
 exit 0
+#
 #EOF

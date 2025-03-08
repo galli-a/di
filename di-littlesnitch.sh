@@ -1,76 +1,48 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install LittleSnitch version 5
+# Purpose: 	Download and install/update the latest version of LittleSnitch
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2020-11-14
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2025-02-18
+# Verified:	2025-02-18
 
 NAME="$0:t:r"
-
-INSTALL_TO='/Applications/Little Snitch.app'
-
-HOMEPAGE="https://www.obdev.at/products/littlesnitch/index.html"
-
-DOWNLOAD_PAGE="https://www.obdev.at/products/littlesnitch/download.html"
-
-SUMMARY="As soon as you’re connected to the Internet, applications can potentially send whatever they want to wherever they want. Most often they do this to your benefit. But sometimes, like in case of tracking software, trojans or other malware, they don’t. But you don’t notice anything, because all of this happens invisibly under the hood. Little Snitch makes these Internet connections visible and puts you back in control."
-
- 	## if you want to install beta releases
- 	## create a file (empty, if you like) using this file name/path:
- 	##
- 	## NOTE: Not sure if this works for LittleSnitch v5 yet
- 	##
-# PREFERS_BETAS_FILE="$HOME/.config/di/prefers/littlesnitch-betas.txt"
-#
-# if [[ -e "$PREFERS_BETAS_FILE" ]]
-# then
-# 		This is for betas
-# 	HEAD_OR_TAIL='tail'
-# 	NAME="$NAME (beta releases)"
-# else
-# 		This is for official, non-beta versions
-# 	HEAD_OR_TAIL='head'
-# fi
 
 if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
 fi
 
-XML_FEED="https://sw-update.obdev.at/update-feeds/littlesnitch5.plist"
+[[ -e "$HOME/.config/di/defaults.sh" ]] && source "$HOME/.config/di/defaults.sh"
 
-HEAD_OR_TAIL='head'
+	# The app will run the related installation processes on first-launch
+INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Little Snitch.app"
 
-RELEASE_NOTES_URL=$(curl -sfL "$XML_FEED" \
-	| fgrep -A1 "<key>ReleaseNotesURL</key>" \
-	| awk -F'>|<' '/string/{print $3}' \
-	| ${HEAD_OR_TAIL} -1)
+	# where to find the latest info about the app
+FEED='https://sw-update.obdev.at/update-feeds/littlesnitch6.plist'
 
-INFO=($(curl -sfL "$XML_FEED" \
-		| egrep -A1 'BundleShortVersionString|BundleVersion|DownloadURL' \
-		| fgrep '<string>' \
-		| ${HEAD_OR_TAIL} -3 \
-		| sort \
-		| sed 's#.*<string>##g; s#</string>##g'))
+	# save it to a tempfile locally to avoid fetching it multiple times
+TEMPFILE="${TMPDIR-/tmp/}${NAME}.${TIME}.$$.$RANDOM.txt"
 
-LATEST_VERSION="$INFO[1]"
+	# save it
+curl -sfLS "$FEED" > "$TEMPFILE"
 
-LATEST_BUILD="$INFO[2]"
+	# Extract the various pieces of data we need from the TEMPFILE
+LATEST_VERSION=$(/usr/libexec/PlistBuddy -c print "$TEMPFILE"  \
+	| fgrep 'BundleShortVersionString' \
+	| awk '{print $NF}')
 
-URL="$INFO[3]"
+LATEST_BUILD=$(/usr/libexec/PlistBuddy -c print "$TEMPFILE"  \
+	| fgrep 'BundleVersion' \
+	| awk '{print $NF}')
 
-	# If any of these are blank, we cannot continue
-if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
-then
-	echo "$NAME: Error: bad data received:
-	INFO: $INFO
-	LATEST_VERSION: $LATEST_VERSION
-	LATEST_BUILD: $LATEST_BUILD
-	URL: $URL
-	"
+URL=$(/usr/libexec/PlistBuddy -c print "$TEMPFILE"  \
+	| fgrep 'DownloadURL' \
+	| awk '{print $NF}')
 
-	exit 1
-fi
+RELEASE_NOTES_URL=$(/usr/libexec/PlistBuddy -c print "$TEMPFILE"  \
+	| fgrep 'ReleaseNotesURL' \
+	| awk '{print $NF}')
 
 if [[ -e "$INSTALL_TO" ]]
 then
@@ -97,26 +69,40 @@ then
 
 	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
 
-	echo "$NAME: Little Snitch is best updated by itself, so the app will now launch."
+	FIRST_INSTALL='no'
 
-	open "$INSTALL_TO"
+	if [[ ! -w "$INSTALL_TO" ]]
+	then
+		echo "$NAME: '$INSTALL_TO' exists, but you do not have 'write' access to it, therefore you cannot update it." >>/dev/stderr
 
-	exit 0
+		exit 2
+	fi
 
 else
 
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/LittleSnitch-${LATEST_VERSION}_${LATEST_BUILD}.dmg"
+FILENAME="${DOWNLOAD_DIR_ALTERNATE-$HOME/Downloads}/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}_${${LATEST_BUILD}// /}.dmg"
 
-if (( $+commands[lynx] ))
+RELEASE_NOTES_TXT="$FILENAME:r.txt"
+
+if [[ -e "$RELEASE_NOTES_TXT" ]]
 then
 
-	( echo "$NAME: Release Notes:" ;
-	lynx -dump -nomargins -width=10000 -assume_charset=UTF-8 -pseudo_inlines "$RELEASE_NOTES_URL"; echo '\n\n' ) \
-	| tee "$FILENAME:r.txt"
+	cat "$RELEASE_NOTES_TXT"
 
+else
+
+	if (( $+commands[lynx] ))
+	then
+
+		RELEASE_NOTES=$(curl -sfLS "$RELEASE_NOTES_URL" \
+		|lynx -dump -width='10000' -display_charset=UTF-8 -assume_charset=UTF-8 -pseudo_inlines -stdin  -nomargins -nonumbers)
+
+		echo "${RELEASE_NOTES}\n\nSource: ${RELEASE_NOTES_URL}\nVersion: ${LATEST_VERSION} / ${LATEST_BUILD}\nURL: ${URL}" | tee "$RELEASE_NOTES_TXT"
+
+	fi
 fi
 
 echo "$NAME: Downloading '$URL' to '$FILENAME':"
@@ -144,17 +130,6 @@ then
 	)  >>| "$FILENAME:r.txt"
 fi
 
-
-
-
-
-
-
-
-
-
-
-
 echo "$NAME: Mounting $FILENAME:"
 
 MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
@@ -178,18 +153,18 @@ then
 	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
 
 		# move installed version to trash
-	echo "$NAME: moving old installed version to '$HOME/.Trash'..."
-	mv -f "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.${INSTALLED_VERSION}_${INSTALLED_BUILD}.app"
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.${INSTALLED_VERSION}_${INSTALLED_BUILD}.app"
 
 	EXIT="$?"
 
 	if [[ "$EXIT" != "0" ]]
 	then
 
-		echo "$NAME: failed to move '$INSTALL_TO' to '$HOME/.Trash'. ('mv' \$EXIT = $EXIT)"
+		echo "$NAME: failed to move '$INSTALL_TO' to Trash. ('mv' \$EXIT = $EXIT)"
 
 		exit 1
 	fi
+
 fi
 
 echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
@@ -211,17 +186,8 @@ fi
 
 echo -n "$NAME: Unmounting $MNTPNT: " && diskutil eject "$MNTPNT"
 
-
-
-
-
-
-
-
-
-
-
-
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
 exit 0
+#
 #EOF

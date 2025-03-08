@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose:
+# Purpose: 	Download and install the latest version of Kiwi for Gmail
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2019-06-05
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2019-02-16
+# Verified:	2025-02-24
 
 NAME="$0:t:r"
 
@@ -12,20 +13,39 @@ then
 	source "$HOME/.path"
 fi
 
-INSTALL_TO='/Applications/Apfelstrudel.app'
+INSTALL_TO='/Applications/Kiwi for Gmail.app'
 
-TEMPFILE="${TMPDIR-/tmp}/${NAME}.$$.$RANDOM.plist"
+	# This is NOT XML!
+FEED='https://downloads.kiwiforgmail.com/kiwi/release/consumer/latest-mac.yml'
 
-curl -sfLS "https://raw.githubusercontent.com/hoakleyelc/updates/master/eclecticapps.plist" > "$TEMPFILE" || exit 1
+IFS=$'\n' INFO=($(curl -sfLS "$FEED" | egrep '^version|url: Kiwi for Gmail.*zip' | sed 's#  - url: ##g ; s#version: ##g'))
 
-LATEST_VERSION=$(/usr/libexec/PlistBuddy -c print "$TEMPFILE" | egrep -i -B1 ' Apfelstrudel$' | awk '{print $NF}' | head -1)
+LATEST_VERSION=$(echo "$INFO[1]")
 
-URL=$(/usr/libexec/PlistBuddy -c print "$TEMPFILE" | egrep -i -A1 ' Apfelstrudel$' | awk '{print $NF}' | tail -1)
+DOWNLOAD_FILENAME=$(echo "$INFO[2]")
+
+DOWNLOAD_PREFIX="https://downloads.kiwiforgmail.com/kiwi/release/consumer"
+
+URL=$(echo "$DOWNLOAD_PREFIX/$DOWNLOAD_FILENAME" | sed 's# #%20#g')
+
+	# If any of these are blank, we cannot continue
+if [ "$INFO" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
+then
+	echo "$NAME: Error: bad data received:
+	INFO: $INFO
+	LATEST_VERSION: $LATEST_VERSION
+	URL: $URL
+	"
+
+	exit 1
+fi
 
 if [[ -e "$INSTALL_TO" ]]
 then
 
 	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
+
+	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
 
 	autoload is-at-least
 
@@ -33,13 +53,17 @@ then
 
 	VERSION_COMPARE="$?"
 
-	if [ "$VERSION_COMPARE" = "0" ]
+	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
+
+	BUILD_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
 	then
-		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
 		exit 0
 	fi
 
-	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
+	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
 
 	FIRST_INSTALL='no'
 
@@ -48,7 +72,7 @@ else
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}.zip"
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.zip"
 
 echo "$NAME: Downloading '$URL' to '$FILENAME':"
 
@@ -62,6 +86,9 @@ EXIT="$?"
 [[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
+
+(cd "$FILENAME:h" ; echo "\n\nLocal sha256:" ; shasum -a 256 "$FILENAME:t" ) >>| "$FILENAME:r.txt"
+
 
 UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
 
@@ -106,10 +133,7 @@ fi
 echo "$NAME: Moving new version of '$INSTALL_TO:t' (from '$UNZIP_TO') to '$INSTALL_TO'."
 
 	# Move the file out of the folder
-	# note that the '/*/' is to go inside whatever subfolder is created
-	# this is something all 'eclecticapps' apps do but most other apps do not
-
-mv -vn "${UNZIP_TO}"/*/"$INSTALL_TO:t" "$INSTALL_TO"
+mv -vn "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
 
 EXIT="$?"
 

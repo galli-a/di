@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install the latest version of MacUpdater
+# Purpose: 	Download and install the latest version of MacUpdater
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2018-07-27; 2019-11-07 switched to DMG instead of zip
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2018-07-27; 2019-11-07 switched to DMG instead of zip
+# Verified:	2025-02-24
 
 NAME="$0:t:r"
 
@@ -17,69 +18,36 @@ SUMMARY="MacUpdater can automatically track the latest updates of all applicatio
 
 # XML_FEED='https://www.corecode.io/macupdater/macupdater.xml'  ## VERSION 1
 
-XML_FEED='https://www.corecode.io/macupdater/macupdater2.xml'
+XML_FEED='https://www.corecode.io/macupdater/macupdater3.xml'
 
 if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
 fi
 
-OS_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion | cut -d. -f2)
-
-if [[ "$OS_VER" -ge "13" ]]
-then
-
-	# 2019-12-07 IMPORTANT: As of MacUpdater version 1.5.0,
-	# the minimum system requirements have been raised to macOS 10.13
-
 	# RELEASE_NOTES_URL='https://www.corecode.io/macupdater/history.html' ## VERSION 1
-	RELEASE_NOTES_URL='https://www.corecode.io/macupdater/history2.html'
+RELEASE_NOTES_URL='https://www.corecode.io/macupdater/history3.html'
 
-	INFO=($(curl -sfL "$XML_FEED" \
-			| egrep '(<enclosure.*url="https://.*\.dmg"|sparkle:version=|sparkle:shortVersionString=)' \
-			| head -3 \
-			| sort \
-			| awk -F'"' '/url|sparkle:version|sparkle:shortVersionString/{print $2}'))
+INFO=($(curl -sfL "$XML_FEED" \
+		| egrep '(<enclosure.*url="https://.*\.dmg"|sparkle:version=|sparkle:shortVersionString=)' \
+		| head -3 \
+		| sort \
+		| awk -F'"' '/url|sparkle:version|sparkle:shortVersionString/{print $2}'))
 
-	LATEST_VERSION="$INFO[1]"
-	LATEST_BUILD="$INFO[2]"
-	URL="$INFO[3]"
+LATEST_VERSION="$INFO[1]"
+LATEST_BUILD="$INFO[2]"
+URL="$INFO[3]"
 
-	if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" ]
-	then
-		echo "$NAME: Bad data from $XML_FEED
-		INFO: $INFO
-		LATEST_VERSION: $LATEST_VERSION
-		LATEST_BUILD: $LATEST_BUILD
-		URL: $URL
-		"
-
-		exit 1
-	fi
-
-elif [ "$OS_VER" = "11" -o "$OS_VER" = "12" ]
+if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" ]
 then
+	echo "$NAME: Bad data from $XML_FEED
+	INFO: $INFO
+	LATEST_VERSION: $LATEST_VERSION
+	LATEST_BUILD: $LATEST_BUILD
+	URL: $URL
+	"
 
-	RELEASE_NOTES_URL=''
-
-		# a DMG made from https://www.corecode.io/downloads/macupdater_1.4.18.zip
-		# If the main URL fails, try this:
-		# URL='https://iusethis.luo.ma/macupdater/MacUpdater-1.4.18_6425.dmg'
-	URL='https://www.dropbox.com/s/qrg8dwpk4wzsh5h/MacUpdater-1.4.18_6425.dmg?dl=0'
-
-	LATEST_VERSION='1.4.18'
-
-	LATEST_BUILD='6425'
-
-else
-
-	SYSTEM_VERSION_COMPAT=1
-
-	echo "$NAME: MacUpdater requires macOS 10.13 or higher for versions above 1.5." >>/dev/stderr
-	echo "$NAME: macOS 10.11 or 10.12 can use version 1.4.18." >>/dev/stderr
-	echo "$NAME: This Mac is running `sw_vers -productVersion`." >>/dev/stderr
 	exit 1
-
 fi
 
 if [[ -e "$INSTALL_TO" ]]
@@ -119,8 +87,6 @@ if [[ "$RELEASE_NOTES_URL" != "" ]]
 then
 	if (( $+commands[lynx] ))
 	then
-
-
 
 		( echo -n "$NAME: Release Notes for $INSTALL_TO:t:r Version: " ;
 		curl -sfL "$RELEASE_NOTES_URL" | sed '1,/<br>/d; /<br>/,$d' \

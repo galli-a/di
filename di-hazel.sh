@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install Hazel 5
+# Purpose: 	Download and install Hazel 6
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2020-11-18
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2025-02-13
+# Verified:	2025-02-24
 
 NAME="$0:t:r"
 
@@ -12,44 +13,29 @@ then
 	source "$HOME/.path"
 fi
 
-	# MIN_VERSION=$(echo "$INFO" \
-	# 			| fgrep '<sparkle:minimumSystemVersion>' \
-	# 			| sed 	-e 's#.*<sparkle:minimumSystemVersion>##g' \
-	# 					-e 's#</sparkle:minimumSystemVersion>##g')
-MIN_VERSION='10.13'
-
-OS_VER=$(sw_vers -productVersion)
-
 autoload is-at-least
-
-is-at-least "$MIN_VERSION" "$OS_VER"
-
-EXIT="$?"
-
-if [[ "$EXIT" != "0" ]]
-then
-	echo "$NAME: Hazel 5 requires at least '$MIN_VERSION' and you're running '$OS_VER'." >>/dev/stderr
-	echo "$NAME: try 'di-hazel4.sh' instead. You can find it at:" >>/dev/stderr
-	echo "https://github.com/tjluoma/di/blob/master/di-hazel4.sh" >>/dev/stderr
-	exit 2
-fi
 
 INSTALL_TO='/Applications/Hazel.app'
 
-	## 2021-01-23 this now redirects to the .php URL below
-	# XML_FEED='https://www.noodlesoft.com/Products/Hazel/appcast'
+STATIC_DOWNLOAD_URL='https://www.noodlesoft.com/Products/Hazel/download'
 
-XML_FEED='https://www.noodlesoft.com/Products/Hazel/generate-appcast.php'
+	# find the actual URL from the STATIC_DOWNLOAD_URL
+URL=$(curl --head -sfLS "$STATIC_DOWNLOAD_URL" \
+		| egrep '^Location: ' \
+		| awk '{print $2}' \
+		| tr -d '\r')
 
-INFO=$(curl -sfLS "$XML_FEED" | awk '/<item>/{i++}i==1')
+	# This feed doesn't have the URL to the latest version in it, just the version number
+	# AKA
+	# https://www.noodlesoft.com/Products/Hazel/generate-appcast.php
+XML_FEED='https://www.noodlesoft.com/Products/Hazel/appcast.php'
 
-RELEASE_NOTES_URL=$(echo "$INFO" | awk -F'>|<' '/description/{print $3}')
+LATEST_VERSION=$(curl -sfLS "$XML_FEED" \
+	| fgrep '<sparkle:version>' \
+	| head -1 \
+	| sed 's#.*<sparkle:version>##g ; s#</sparkle:version>##g')
 
-LATEST_VERSION=$(echo "$INFO" | tr ' ' '\012' | awk -F'"' '/^sparkle:version=/{print $2}')
-
-	## 2021-01-23 - this is how I had been doing it previously, but trying new way
-	# URL=$(curl --head -sfLS "https://www.noodlesoft.com/Products/Hazel/download" | awk -F' |\r' '/^Location: /{print $2}')
-URL="https://s3.amazonaws.com/Noodlesoft/Hazel-${LATEST_VERSION}.dmg"
+RELEASE_NOTES_URL='https://www.noodlesoft.com/Products/Hazel/changelog.php'
 
 if [[ -e "$INSTALL_TO" ]]
 then
@@ -80,6 +66,7 @@ then
 else
 
 	FIRST_INSTALL='yes'
+
 fi
 
 FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}.dmg"
@@ -98,7 +85,7 @@ else
 
 		RELEASE_NOTES=$(curl -sfLS "$RELEASE_NOTES_URL" | lynx -assume_charset=UTF-8 -stdin -pseudo_inlines -dump -nomargins -width=10000)
 
-		echo "${RELEASE_NOTES}\n\nSource: ${RELEASE_NOTES_URL}\nVersion : ${LATEST_VERSION}\nURL: $URL" | tee "$RELEASE_NOTES_TXT"
+		echo "${RELEASE_NOTES}\n\nSource:\t${RELEASE_NOTES_URL}\n\nVersion: ${LATEST_VERSION}\nURL: $URL" | tee "$RELEASE_NOTES_TXT"
 
 	fi
 
@@ -117,6 +104,7 @@ EXIT="$?"
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
+	# if there is already a local sha256 don't add another one
 egrep -q '^Local sha256:$' "$FILENAME:r.txt" 2>/dev/null
 
 EXIT="$?"
@@ -163,24 +151,38 @@ then
 	fi
 fi
 
-echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
+	# If I use the 'ditto' process below, macOS relentlessly claims that Hazel is damaged and
+	# cannot be opened, and should be moved to the trash. I assume this has something to do
+	# with Gatekeeper etc. If we open the app from the mounted DMG, the user can install
+	# it themselves. But this is less than ideal, especially for updates, because it
+	# requires human intervention. However, until I can figure out an alternative, this is the
+	# best we can do. And by 'we' I mean 'me'.
+open "$MNTPNT/Hazel.app"
 
-ditto --noqtn -v "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
 
-EXIT="$?"
-
-if [[ "$EXIT" == "0" ]]
-then
-	echo "$NAME: Successfully installed $INSTALL_TO"
-else
-	echo "$NAME: ditto failed"
-
-	exit 1
-fi
-
-[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
-
-echo -n "$NAME: Unmounting $MNTPNT: " && diskutil eject "$MNTPNT"
+###################################################################################################
+#
+#
+# echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
+#
+# ditto --noqtn -v "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
+#
+# EXIT="$?"
+#
+# if [[ "$EXIT" == "0" ]]
+# then
+# 	echo "$NAME: Successfully installed $INSTALL_TO"
+# else
+# 	echo "$NAME: ditto failed"
+#
+# 	exit 1
+# fi
+#
+# [[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
+#
+# echo -n "$NAME: Unmounting $MNTPNT: " && diskutil eject "$MNTPNT"
+#
+###################################################################################################
 
 exit 0
-#EOF
+# EOF

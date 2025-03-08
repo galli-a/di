@@ -1,33 +1,51 @@
 #!/usr/bin/env zsh -f
-# Purpose: A network monitor, allows one to explore all network sockets and connections, either via an interactive UI, or from the commandline
+# Purpose: 	Download and install the latest version of VirtualHostX
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2019-08-26
-
-NAME="$0:t:r"
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2018-09-07
+# Verified:	2025-02-22
 
 if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
 fi
 
-INSTALL_TO='/Applications/Netiquette.app'
+NAME="$0:t:r"
 
-## NOTE: "https://objective-see.com/products.json" is often outdated
+INSTALL_TO="/Applications/VirtualHostX.app"
 
-URL=$(curl -sfLS "https://objective-see.com/products/netiquette.html" | tr '"' '\012' | egrep -i "^http.*netiquette.*\.zip" | head -1)
+XML_FEED='https://soulver.app/mac/sparkle/appcast.xml'
+HOMEPAGE="https://clickontyler.com/virtualhostx/"
 
-	# This is a plain text file. At some point we might want to limit how much we fetch but for now we'll just take the whole thing
-RELEASE_NOTES_URL='https://objective-see.com/products/changelogs/Netiquette.txt'
+DOWNLOAD_PAGE="https://clickontyler.com/virtualhostx/download/"
 
-LATEST_VERSION=$(echo "$URL:t:r" | tr -dc '[0-9]\.')
+SUMMARY="VirtualHostX 8.0 is the easiest way to build and test multiple websites on your Mac. It’s the perfect solution for web designers working on more than one project at a time. With VirtualHostX you can easily create and manage unlimited Apache websites with just a few clicks."
+
+# XML_FEED='http://shine.clickontyler.com/appcast.php?id=38'
+
+## This is the new 'Pro' feed
+XML_FEED='https://shine.clickontyler.com/appcast.php?id=45'
+
+INFO=($(curl -sSfL "${XML_FEED}" \
+		| tr -s ' ' '\012' \
+		| egrep 'sparkle:version|sparkle:shortVersionString|url=' \
+		| head -3 \
+		| sort \
+		| awk -F'"' '/^/{print $2}'))
+
+	# "Sparkle" will always come before "url" because of "sort"
+LATEST_VERSION="$INFO[1]"
+LATEST_BUILD="$INFO[2]"
+URL="$INFO[3]"
 
 	# If any of these are blank, we cannot continue
-if [ "$URL" = "" -o "$LATEST_VERSION" = "" ]
+if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
 then
 	echo "$NAME: Error: bad data received:
+	INFO: $INFO
 	LATEST_VERSION: $LATEST_VERSION
+	LATEST_BUILD: $LATEST_BUILD
 	URL: $URL
 	"
 
@@ -39,19 +57,25 @@ then
 
 	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
 
+	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
+
 	autoload is-at-least
 
 	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
 
 	VERSION_COMPARE="$?"
 
-	if [ "$VERSION_COMPARE" = "0" ]
+	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
+
+	BUILD_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
 	then
-		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
 		exit 0
 	fi
 
-	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
+	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
 
 	FIRST_INSTALL='no'
 
@@ -60,17 +84,18 @@ else
 	FIRST_INSTALL='yes'
 fi
 
+FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}_${LATEST_BUILD}.zip"
 
-FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}.zip"
-
-curl -sfLS "$RELEASE_NOTES_URL" >| "$FILENAME:r.txt"
-
-SHA1=$(curl -sfLS "https://objective-see.com/products/netiquette.html" | awk -F' ' '/sha-1/{print $NF}')
-
-if [[ "$SHA1" != "" ]]
+if (( $+commands[lynx] ))
 then
-	SUMFILE="$FILENAME:r.sha1.txt"
-	echo "${SHA1} ?${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}.zip" >| "$SUMFILE"
+
+	(echo "$NAME: Release Notes for $INSTALL_TO:t:r ($LATEST_VERSION/$LATEST_BUILD):" ;
+	curl -sfLS "$XML_FEED" \
+	| awk '/<description/{i++}i==2' \
+	| sed -e '/<pubDate>/,$d' -e 's#\<\!\[CDATA\[##g' -e 's#\]\]\>##g' \
+	| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin ) \
+	| tee "$FILENAME:r.txt"
+
 fi
 
 echo "$NAME: Downloading '$URL' to '$FILENAME':"
@@ -86,46 +111,6 @@ EXIT="$?"
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
-if [[ -e "$SUMFILE" ]]
-then
-	cd "$FILENAME:h"
-
-	shasum -c "$SUMFILE"
-
-	EXIT="$?"
-
-	if [[ "$EXIT" != "0" ]]
-	then
-
-		echo "$NAME: SHA1 verification failed"
-
-		exit 1
-	fi
-fi
-
-(cd "$FILENAME:h" ; echo "\nURL: $URL\n\nLocal sha256:" ; shasum -a 256 "$FILENAME:t" ) >>| "$FILENAME:r.txt"
-
-## make sure that the .zip is valid before we proceed
-(command unzip -l "$FILENAME" 2>&1 )>/dev/null
-
-EXIT="$?"
-
-if [ "$EXIT" = "0" ]
-then
-	echo "$NAME: '$FILENAME' is a valid zip file."
-
-else
-	echo "$NAME: '$FILENAME' is an invalid zip file (\$EXIT = $EXIT)"
-
-	mv -fv "$FILENAME" "$HOME/.Trash/"
-
-	mv -fv "$FILENAME:r".* "$HOME/.Trash/"
-
-	exit 0
-
-fi
-
-## unzip to a temporary directory
 UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
 
 echo "$NAME: Unzipping '$FILENAME' to '$UNZIP_TO':"

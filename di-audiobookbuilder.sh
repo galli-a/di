@@ -1,9 +1,10 @@
-#!/bin/zsh -f
-# Purpose: Download and install latest version of AudioBook Builder from http://www.splasm.com/audiobookbuilder/
+#!/usr/bin/env zsh -f
+# Purpose: 	Download and install latest version of AudioBook Builder from http://www.splasm.com/audiobookbuilder/
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2015-12-09
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2015-12-09
+# Verified:	2025-02-18
 
 NAME="$0:t:r"
 

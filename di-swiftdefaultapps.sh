@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download the latest version of SwiftDefaultApps from <https://github.com/Lord-Kamina/SwiftDefaultApps>
+# Purpose: 	Download the latest version of SwiftDefaultApps from <https://github.com/Lord-Kamina/SwiftDefaultApps>
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2019-07-28
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2019-07-28
+# Verified:	2025-03-01
 
 NAME="$0:t:r"
 
@@ -14,15 +15,15 @@ fi
 
 INSTALL_TO="$HOME/Library/PreferencePanes/SwiftDefaultApps.prefPane"
 
-LATEST_URL=$(curl -sfLS --head --location "https://github.com/Lord-Kamina/SwiftDefaultApps/releases/latest" \
-			| egrep -i '^Location: ' \
-			| tail -1 \
-			| awk '{print $2}' \
-			| tr -d '\r')
+# LATEST_URL=$(curl -sfLS --head --location "https://github.com/Lord-Kamina/SwiftDefaultApps/releases/latest" \
+# 			| egrep -i '^Location: ' \
+# 			| tail -1 \
+# 			| awk '{print $2}' \
+# 			| tr -d '\r')
 
-LATEST_VERSION=$(echo "$LATEST_URL:t" | tr -dc '[0-9]\.')
-
-URL=$(curl -sfLS "$LATEST_URL" | fgrep '/Lord-Kamina/SwiftDefaultApps/releases/download/' | sed 's#.*href="#https://github.com#g ; s#" .*##g')
+	# Project hasn't really been active since 2019. Hard-coding URL and Version info
+LATEST_VERSION=2.0.1
+URL='https://github.com/Lord-Kamina/SwiftDefaultApps/releases/download/v2.0.1/SwiftDefaultApps-v2.0.1.zip'
 
 if [[ -e "$INSTALL_TO" ]]
 then
@@ -77,16 +78,7 @@ EXIT="$?"
 
 (cd "$FILENAME:h" ; echo "\nLocal sha256:" ; shasum -a 256 "$FILENAME:t" ) >>| "$FILENAME:r.txt"
 
-	# needs at least 10.12 to work
-OS_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion | cut -d. -f2)
-
-if [[ "$OS_VER" -lt "12" ]]
-then
-	echo "\n$NAME: SwiftDefaultApps.prefPane requires at least macOS 10.12. This is 10.$OS_VER.\n"
-	exit 1
-fi
-
-## make sure that the .zip is valid before we proceed
+	## make sure that the .zip is valid before we proceed
 (command unzip -l "$FILENAME" 2>&1 )>/dev/null
 
 EXIT="$?"

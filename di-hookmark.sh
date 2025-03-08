@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose:
+# Purpose: 	Download and install/update the latest version of Hook from <https://hookproductivity.com/>
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2021-02-05
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2019-10-12
+# Verified:	2025-02-24
 
 NAME="$0:t:r"
 
@@ -12,46 +13,61 @@ then
 	source "$HOME/.path"
 fi
 
-INSTALL_TO='/Applications/Meet Cam.app'
+INSTALL_TO='/Applications/Hookmark.app'
 
-XML_FEED='https://downloads.meet.cam/updates/appcast.xml'
+# XML_FEED='https://updates.devmate.com/com.cogsciapps.hook.xml'
+#
+# INFO=($(curl -sfLS "$XML_FEED" \
+# 		| awk '/<item>/{i++}i==1' \
+# 		| tr -s '\t| ' '\012' \
+# 		| egrep -i '<sparkle:releaseNotesLink>|url=|sparkle:version=|sparkle:shortVersionString=' \
+# 		| sort \
+# 		| tr '<|>|"' ' ' \
+# 		| awk '{print $2}'))
+#
+#
+# 	RELEASE_NOTES_URL="$INFO[1]"
+#
+# 	LATEST_VERSION="$INFO[2]"
+#
+# 	LATEST_BUILD="$INFO[3]"
+#
+# 	URL="$INFO[4]"
 
-INFO=($(curl -sfLS "$XML_FEED" \
-	| tr -s '\t|\n| ' ' ' \
-| sed -e 's#.*<item>##g' -e 's# </item>.*##g' -e 's#> <#>\
-<#g' -e 's# url=#\
-url=#g' -e 's# sparkle:#\
-sparkle:#g' \
-	-e 's#</sparkle:minimumSystemVersion>#"#g' \
-	-e 's#<sparkle:releaseNotesLink>#sparkle:releaseNotesLink="#g' \
-	-e 's#</sparkle:releaseNotesLink>#"#g' \
-	-e 's# length=.*##g' \
-	-e 's#<sparkle:minimumSystemVersion>#sparkle:minimumSystemVersion="#' \
-	| egrep 'sparkle:|^url=' \
-	| sort \
-	| awk -F'"' '//{print $2}'))
+XML_FEED="https://api.appcenter.ms/v0.1/public/sparkle/apps/a77a1a87-7d69-435d-90ea-7365b2f7bddb"
 
-MINVERSION="$INFO[1]"
-RELEASE_NOTES_URL="$INFO[2]"
-LATEST_VERSION="$INFO[3]"
-LATEST_BUILD="$INFO[4]"
-URL="$INFO[5]"
+INFO=$(curl -sfLS "$XML_FEED" \
+	| tr -s '\012|\r| ' ' ')
 
-OS_VER=$(sw_vers -productVersion)
+LATEST_BUILD=$(echo "$INFO" | sed -e 's#.*sparkle:version="##g' -e 's#" .*##g')
 
-autoload is-at-least
+LATEST_VERSION=$(echo "$INFO" | sed -e 's#.*sparkle:shortVersionString="##g' -e 's#" .*##g')
 
-is-at-least "$MINVERSION" "$OS_VER"
+URL=$(echo "$INFO" | sed -e 's#.* url="##g' -e 's#" .*##g' -e 's#\&amp\;#\&#g')
 
-EXIT="$?"
-
-if [[ "$EXIT" != "0" ]]
+	# If any of these are blank, we cannot continue
+if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
 then
+	echo "$NAME: Error: bad data received:
+	INFO: $INFO
+	LATEST_VERSION: $LATEST_VERSION
+	LATEST_BUILD: $LATEST_BUILD
+	URL: $URL
+	"
 
-	echo "$NAME: $MINVERSION is required and you are running $OS_VER." >>/dev/stderr
-
-	exit 2
+	exit 1
 fi
+
+# echo "
+# 	INFO: $INFO
+# 	LATEST_VERSION: $LATEST_VERSION
+# 	LATEST_BUILD: $LATEST_BUILD
+# 	URL: $URL
+# 	RELEASE_NOTES:
+# ---
+# $RELEASE_NOTES
+# ---
+# "
 
 if [[ -e "$INSTALL_TO" ]]
 then
@@ -80,43 +96,27 @@ then
 
 	FIRST_INSTALL='no'
 
-	if [[ ! -w "$INSTALL_TO" ]]
-	then
-		echo "$NAME: '$INSTALL_TO' exists, but you do not have 'write' access to it, therefore you cannot update it." >>/dev/stderr
-
-		exit 2
-	fi
-
 else
 
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}_${${LATEST_BUILD}// /}.zip"
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.dmg"
 
-RELEASE_NOTES_TXT="$FILENAME:r.txt"
-
-if [[ -e "$RELEASE_NOTES_TXT" ]]
+if (( $+commands[lynx] ))
 then
 
-	cat "$RELEASE_NOTES_TXT"
+	# 	( lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines "$RELEASE_NOTES_URL" \
+	#  	  | sed 's#____________________________#_#g' ;\
+	# 	echo "\nURL: $URL" ;\
+	#  	) | tee "$FILENAME:r.txt"
 
-else
+	RELEASE_NOTES=$(echo "$INFO" \
+		| sed -e 's#.*<description>##g' -e 's#</description>.*##g' \
+		| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin \
+		| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin )
 
-	if (( $+commands[lynx] ))
-	then
-
-		RELEASE_NOTES=$(curl -sfLS "$RELEASE_NOTES_URL" \
-| awk '/<div class="release">/{i++}i==1' \
-| lynx -dump -width='10000' -display_charset=UTF-8 -assume_charset=UTF-8 -pseudo_inlines -stdin -nomargins \
-| sed 's#  \* #\
-\#\# #g')
-
-#### Do Not Indent
-
-		echo "${RELEASE_NOTES}\n\nSource: ${RELEASE_NOTES_URL}\nVersion: ${LATEST_VERSION} / ${LATEST_BUILD}\nURL: ${URL}" | tee "$RELEASE_NOTES_TXT"
-
-	fi
+	echo "${RELEASE_NOTES}\n\nURL: $URL" | tee "$FILENAME:r.txt"
 
 fi
 
@@ -133,17 +133,8 @@ EXIT="$?"
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
-egrep -q '^Local sha256:$' "$FILENAME:r.txt" 2>/dev/null
+(cd "$FILENAME:h" ; echo "\nLocal sha256:" ; shasum -a 256 "$FILENAME:t" ) >>| "$FILENAME:r.txt"
 
-EXIT="$?"
-
-if [ "$EXIT" = "1" -o ! -e "$FILENAME:r.txt" ]
-then
-	(cd "$FILENAME:h" ; \
-	echo "\n\nLocal sha256:" ; \
-	shasum -a 256 "$FILENAME:t" \
-	)  >>| "$FILENAME:r.txt"
-fi
 
 
 TEMPDIR=$(mktemp -d "${TMPDIR-/tmp/}${NAME-$0:r}-XXXXXXXX")

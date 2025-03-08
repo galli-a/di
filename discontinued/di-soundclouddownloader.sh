@@ -1,37 +1,50 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download Gitbox from from <http://gitboxapp.com/>
+# Purpose: Download and install/update the latest version of SoundCloud Downloader.app from https://birdicode.com/app/SCD2/
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
-# Date:	2018-08-24
+# Date:	2019-05-21
+
+# 2025-02-27 - https://birdicode.com/app is gone
 
 NAME="$0:t:r"
-
-INSTALL_TO="/Applications/Gitbox.app"
-
-HOMEPAGE="http://gitboxapp.com/"
-
-DOWNLOAD_PAGE="http://gitboxapp.com"
-
-SUMMARY="Version control as easy as Mail. One-click commit, push and pull. Unique search in history and undo for Git commands. Powerful commands like rebase, branch reset and cherry picking. And now it works with submodules."
 
 if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
 fi
 
-URL="http://d1oa71y4zxyi0a.cloudfront.net/gitbox-1.6.2.zip"
+	# found XML_FEED from an older version of the app which used
+	# 	http://black-burn.ch/applications/scd/updates.php?hwni=1
+	# Newer versions of the app seem to do something 'clever'
+	# but the feed still works, so I'm using it (as does `brew cask`)
+	#
+	# Downloads are from
+	# 	https://black-burn.ch/app/SCD2/download/2.8.2
+	# and have
+	# 	Content-Disposition: filename=SCD2-282.zip
+	# which isn't important to us because we use our own filenames anyway
 
-LATEST_VERSION="1.6.2"
+XML_FEED='https://black-burn.ch/apps/SCD2/updates/gold.xml?hwni=1'
 
-RELEASE_NOTES_URL='http://gitboxapp.com/release-notes/1.6.2.html'
+INSTALL_TO='/Applications/SoundCloud Downloader.app'
 
-ITUNES_URL="apps.apple.com/us/app/gitbox/id403388357"
+INFO=$(curl -sfLS "$XML_FEED" | awk '/<item>/{i++}i==1')
+
+RELEASE_NOTES_URL=$(echo "$INFO" | fgrep '<sparkle:releaseNotesLink' | sed 's#</sparkle:releaseNotesLink>##g; s#.*>##g')
+
+URL=$(echo "$INFO" | tr -s ' ' '\012' | awk -F'"' '/^url/{print $2}')
+
+LATEST_BUILD=$(echo "$INFO" | tr -s ' ' '\012' | awk -F'"' '/^sparkle:version/{print $2}')
+
+LATEST_VERSION=$(echo "$INFO" | tr -s ' ' '\012' | awk -F'"' '/^sparkle:shortVersionString/{print $2}')
 
 if [[ -e "$INSTALL_TO" ]]
 then
 
 	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
+
+	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
 
 	autoload is-at-least
 
@@ -39,41 +52,33 @@ then
 
 	VERSION_COMPARE="$?"
 
-	if [ "$VERSION_COMPARE" = "0" ]
+	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
+
+	BUILD_COMPARE="$?"
+
+	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
 	then
-		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
 		exit 0
 	fi
 
-	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
+	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
 
 	FIRST_INSTALL='no'
-
-	if [[ -e "$INSTALL_TO/Contents/_MASReceipt/receipt" ]]
-	then
-		echo "$NAME: $INSTALL_TO was installed from the Mac App Store and cannot be updated by this script."
-
-		if [[ "$ITUNES_URL" != "" ]]
-		then
-			echo "	See <https://$ITUNES_URL?mt=12> or"
-			echo "	<macappstore://$ITUNES_URL>"
-		fi
-
-		echo "	Please use the App Store app to update it: <macappstore://showUpdatesPage?scan=true>"
-		exit 0
-	fi
 
 else
 
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}.zip"
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.zip"
 
 if (( $+commands[lynx] ))
 then
-	(lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines "${RELEASE_NOTES_URL}";
-	 echo "\nSource: <$RELEASE_NOTES_URL>")  | tee "$FILENAME:r.txt"
+
+	( lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -nonumbers -nolist "$RELEASE_NOTES_URL" ) \
+	| tee "$FILENAME:r.txt"
+
 fi
 
 echo "$NAME: Downloading '$URL' to '$FILENAME':"
@@ -112,7 +117,7 @@ then
 
 	pgrep -xq "$INSTALL_TO:t:r" \
 	&& LAUNCH='yes' \
-	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
+	&& osascript -e 'tell application "$INSTALL_TO:t:r" to quit'
 
 	echo "$NAME: Moving existing (old) '$INSTALL_TO' to '$HOME/.Trash/'."
 

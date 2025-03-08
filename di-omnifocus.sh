@@ -1,9 +1,16 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install the latest OmniFocus 2 or 3 (depending on which is installed)
+# Purpose: 	Download and install/update the latest version of OmniFocus 4
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2018-08-21
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2025-02-15
+# Verified:	2025-02-15
+
+
+if [[ -e "$HOME/.path" ]]
+then
+	source "$HOME/.path"
+fi
 
 NAME="$0:t:r"
 
@@ -15,45 +22,8 @@ DOWNLOAD_PAGE="https://www.omnigroup.com/download/latest/omnifocus/"
 
 SUMMARY="Live a productive, contextual life with OmniFocus. Keep work and play separated with contexts, perspectives, and Focus. Ignore the irrelevant, focus on what you can do now, and accomplish more. And do it all much faster than before."
 
-if [[ -e "$HOME/.path" ]]
-then
-	source "$HOME/.path"
-fi
+XML_FEED="http://update.omnigroup.com/appcast/com.omnigroup.OmniFocus4/"
 
-function use_v2 {
-	XML_FEED="http://update.omnigroup.com/appcast/com.omnigroup.OmniFocus2/"
-	ITUNES_URL="apps.apple.com/us/app/omnifocus-2/id867299399"
-	ASTERISK='Note: version 3 is now available from: <https://www.omnigroup.com/omnifocus>'
-}
-
-function use_v3 {
-
-	XML_FEED="http://update.omnigroup.com/appcast/com.omnigroup.OmniFocus3/"
-	ITUNES_URL="apps.apple.com/us/app/omnifocus-3/id1346203938"
-	ASTERISK=''
-}
-
-if [[ -e "$INSTALL_TO" ]]
-then
-		# if v2 is installed, check that. Otherwise, use v3
-	MAJOR_VERSION=$(defaults read "$INSTALL_TO/Contents/Info" CFBundleShortVersionString | cut -d. -f1)
-
-	if [[ "$MAJOR_VERSION" == "2" ]]
-	then
-		use_v2
-	else
-		use_v3
-	fi
-else
-	if [ "$1" = "--use2" -o "$1" = "-2" ]
-	then
-		use_v2
-	else
-		use_v3
-	fi
-fi
-
-	## Note: Downloads are available in tbz2 and dmg but dmg has EULA so I use tbz2
 INFO=($(curl -sfL "$XML_FEED" \
 		| tidy --input-xml yes --output-xml yes --show-warnings no --force-output yes --quiet yes --wrap 0  \
 		| egrep '<omniappcast:buildVersion>|<omniappcast:releaseNotesLink>|<omniappcast:marketingVersion>|url=.*\.tbz2' \
@@ -70,7 +40,7 @@ LATEST_BUILD="$INFO[2]"
 LATEST_VERSION="$INFO[3]"
 RELEASE_NOTES_URL="$INFO[4]"
 
-	# If any of these are blank, we cannot continue
+# If any of these are blank, we cannot continue
 if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
 then
 	echo "$NAME: Error: bad data received:
@@ -115,7 +85,7 @@ else
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}_${LATEST_BUILD}.tbz2"
+FILENAME="${DOWNLOAD_DIR_ALTERNATE-$HOME/Downloads}/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}_${${LATEST_BUILD}// /}.tbz2"
 
 if (( $+commands[lynx] ))
 then
@@ -134,7 +104,7 @@ curl --continue-at - --fail --location --output "$FILENAME" "$URL"
 
 EXIT="$?"
 
-	## exit 22 means 'the file was already fully downloaded'
+## exit 22 means 'the file was already fully downloaded'
 [ "$EXIT" != "0" -a "$EXIT" != "22" ] && echo "$NAME: Download of $URL failed (EXIT = $EXIT)" && exit 0
 
 [[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
@@ -164,7 +134,7 @@ then
 	&& LAUNCH='yes' \
 	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
 
-		# move installed version to trash
+	# move installed version to trash
 	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
 
 	EXIT="$?"
@@ -176,7 +146,7 @@ then
 	fi
 fi
 
-	# move the app from the temp folder to the regular installation dir
+# move the app from the temp folder to the regular installation dir
 mv -vf "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
 
 EXIT="$?"

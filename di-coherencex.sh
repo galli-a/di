@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose:
+# Purpose:	Download and install the latest version of Coherence X
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2021-05-12
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2021-05-12
+# Verified:	2025-02-24
 
 NAME="$0:t:r"
 
@@ -14,7 +15,9 @@ fi
 
 INSTALL_TO='/Applications/Coherence X.app'
 
-XML_FEED='https://bzgdownloads.s3.amazonaws.com/Coherence/App+Cast/appcast.xml'
+# XML_FEED='https://bzgdownloads.s3.amazonaws.com/Coherence/App+Cast/appcast.xml'
+
+XML_FEED='https://bzgdownloads.s3.amazonaws.com/Coherence/App+Cast/appcast4.xml'
 
 INFO=($(curl -sfLS "$XML_FEED" \
 		| awk '/<item>/{i++}i==1' \

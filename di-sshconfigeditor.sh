@@ -1,13 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install/update latest version of https://hejki.org/ssheditor/
+# Purpose: 	Download and install/update latest version of https://hejki.org/ssheditor/
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2020-02-21
-
-
-## Note: previous version was DMG not ZIP
-
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2020-02-21
+# Verified:	2025-03-04
 
 NAME="$0:t:r"
 
@@ -18,28 +15,24 @@ fi
 
 INSTALL_TO='/Applications/SSH Config Editor.app'
 
-XML_FEED='https://hejki.org/download/ssheditor/appcast.xml'
+XML_FEED='https://hejki.org/download/ssheditor/appcast2.xml'
 
-INFO=$(curl -sfLS "$XML_FEED" \
-	| egrep -iv '(:deltas|\.delta)' \
-	| sed 's#^[	 ]*##g' \
-	| tr -s '\012|\r| ' ' ' \
-	| sed -e 's#> <#><#g' -e 's#> #>#g' -e 's# <#<#g' -e 's#.*<item>##g')
+INFO=$(curl -sfLS "$XML_FEED" | awk '/<item>/{i++}i==1' | fgrep -v 'delta' | tr '\012' ' ')
 
-RELEASE_NOTES_URL=$(echo "$INFO" | sed -e 's#.*<sparkle:releaseNotesLink>##g' -e 's#</sparkle:releaseNotesLink>.*##')
+URL=$(echo "$INFO" | sed 's#.*enclosure url="##g ; s#" .*##g')
 
-LATEST_BUILD=$(echo "$INFO" | sed -e 's#.* sparkle:version="##g' -e 's#" .*##g')
+RELEASE_NOTES_HTML=$(echo "$INFO" | sed 's#.*<description>##g ; s#</description>.*##g ; s#<\!\[CDATA\[##g ; s#\]\]>##g')
 
-LATEST_VERSION=$(echo "$INFO" | sed -e 's#.* sparkle:shortVersionString="##g' -e 's#" .*##g')
+LATEST_VERSION=$(echo "$INFO" | sed 's#.*<sparkle:shortVersionString>##g ; s#</sparkle:shortVersionString>.*##g')
 
-URL=$(echo "$INFO" | sed -e 's#.* url="##g' -e 's#" .*##g')
+LATEST_BUILD=$(echo "$INFO" | sed 's#.*<sparkle:version>##g ; s#</sparkle:version>.*##g' )
 
 	# If any of these are blank, we cannot continue
 if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
 then
 	echo "$NAME: Error: bad data received:
 	INFO: $INFO
-	RELEASE_NOTES_URL: $RELEASE_NOTES_URL
+	RELEASE_NOTES_HTML: $RELEASE_NOTES_HTML
 	LATEST_VERSION: $LATEST_VERSION
 	LATEST_BUILD: $LATEST_BUILD
 	URL: $URL
@@ -87,7 +80,7 @@ else
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}_${${LATEST_BUILD}// /}.zip"
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}_${${LATEST_BUILD}// /}.dmg"
 
 if (( $+commands[lynx] ))
 then
@@ -97,9 +90,10 @@ then
 		cat "$FILENAME:r.txt"
 
 	else
-		RELEASE_NOTES=$(lynx -dump -nomargins -width='10000' -display_charset=UTF-8 -assume_charset=UTF-8 -pseudo_inlines "$RELEASE_NOTES_URL")
+		RELEASE_NOTES=$(echo "$RELEASE_NOTES_HTML" \
+		| lynx -dump -nomargins -width='10000' -display_charset=UTF-8 -assume_charset=UTF-8 -pseudo_inlines -stdin)
 
-		echo "${RELEASE_NOTES}\n\nSource: ${RELEASE_NOTES_URL}\nVersion : ${LATEST_VERSION} / ${LATEST_BUILD}\nURL: $URL" | tee "$FILENAME:r.txt"
+		echo "${RELEASE_NOTES}\n\nSource: ${XML_FEED}\nVersion : ${LATEST_VERSION} / ${LATEST_BUILD}\nURL: $URL" | tee "$FILENAME:r.txt"
 	fi
 fi
 
@@ -128,83 +122,61 @@ then
 	)  >>| "$FILENAME:r.txt"
 fi
 
-	## make sure that the .zip is valid before we proceed
-(command unzip -l "$FILENAME" 2>&1 )>/dev/null
+echo "$NAME: Mounting $FILENAME:"
 
-EXIT="$?"
+MNTPNT=$(hdiutil attach -nobrowse -plist "$FILENAME" 2>/dev/null \
+	| fgrep -A 1 '<key>mount-point</key>' \
+	| tail -1 \
+	| sed 's#</string>.*##g ; s#.*<string>##g')
 
-if [ "$EXIT" = "0" ]
+if [[ "$MNTPNT" == "" ]]
 then
-	echo "$NAME: '$FILENAME' is a valid zip file."
-
-else
-	echo "$NAME: '$FILENAME' is an invalid zip file (\$EXIT = $EXIT)"
-
-	mv -fv "$FILENAME" "$HOME/.Trash/"
-
-	mv -fv "$FILENAME:r".* "$HOME/.Trash/"
-
-	exit 0
-fi
-
-	## unzip to a temporary directory
-UNZIP_TO=$(mktemp -d "$HOME/.Trash/${NAME}-XXXXXXXX")
-
-echo "$NAME: Unzipping '$FILENAME' to '$UNZIP_TO':"
-
-ditto -xk --noqtn "$FILENAME" "$UNZIP_TO"
-
-EXIT="$?"
-
-if [[ "$EXIT" == "0" ]]
-then
-	echo "$NAME: Unzip successful"
-else
-		# failed
-	echo "$NAME failed (ditto -xkv '$FILENAME' '$UNZIP_TO')"
-
+	echo "$NAME: MNTPNT is empty"
 	exit 1
+else
+	echo "$NAME: MNTPNT is $MNTPNT"
 fi
 
 if [[ -e "$INSTALL_TO" ]]
 then
-
+		# Quit app, if running
 	pgrep -xq "$INSTALL_TO:t:r" \
 	&& LAUNCH='yes' \
 	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
 
-	echo "$NAME: Moving existing (old) '$INSTALL_TO' to '$HOME/.Trash/'."
-
-	mv -f "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
+		# move installed version to trash
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.${INSTALLED_VERSION}_${INSTALLED_BUILD}.app"
 
 	EXIT="$?"
 
 	if [[ "$EXIT" != "0" ]]
 	then
 
-		echo "$NAME: failed to move existing '$INSTALL_TO' to '$HOME/.Trash'."
+		echo "$NAME: failed to move '$INSTALL_TO' to Trash. ('mv' \$EXIT = $EXIT)"
 
 		exit 1
 	fi
+
 fi
 
-echo "$NAME: Moving new version of '$INSTALL_TO:t' (from '$UNZIP_TO') to '$INSTALL_TO'."
+echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
 
-	# Move the file out of the folder
-mv -n "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
+ditto --noqtn -v "$MNTPNT/$INSTALL_TO:t" "$INSTALL_TO"
 
 EXIT="$?"
 
-if [[ "$EXIT" = "0" ]]
+if [[ "$EXIT" == "0" ]]
 then
-
-	echo "$NAME: Successfully installed '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
-
+	echo "$NAME: Successfully installed $INSTALL_TO"
 else
-	echo "$NAME: Failed to move '$UNZIP_TO/$INSTALL_TO:t' to '$INSTALL_TO'."
+	echo "$NAME: ditto failed"
 
 	exit 1
 fi
+
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
+
+echo -n "$NAME: Unmounting $MNTPNT: " && diskutil eject "$MNTPNT"
 
 [[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install the latest version of Vellum
+# Purpose: 	Download and install the latest version of Vellum
 #
-# From:	Tj Luo.ma
-# Mail:	luomat at gmail dot com
-# Web: 	http://RhymesWithDiploma.com
-# Date:	2015-09-24, verified 2018-08-07
+# From:		Tj Luo.ma
+# Mail:		luomat at gmail dot com
+# Web: 		http://RhymesWithDiploma.com
+# Date:		2015-09-24, @TODO - check when not up-to-date
+# Verified:	2025-02-22
 
 NAME="$0:t:r"
 
@@ -24,9 +25,10 @@ then
 fi
 
 INFO=($(curl -sfL "$XML_FEED" \
+	| fgrep -v 'delta' \
 	| tr ' ' '\012' \
 	| egrep '^(url|sparkle:shortVersionString|sparkle:version)=' \
-	| head -3 \
+	| tail -3 \
 	| sort \
 	| awk -F'"' '//{print $2}'))
 
@@ -34,7 +36,7 @@ LATEST_VERSION="$INFO[1]"
 
 LATEST_BUILD="$INFO[2]"
 
-URL=$(echo "$INFO[3]" | sed 's#https:/180g#https://180g#g' )
+URL=$(echo "$INFO[3]")
 
 if [ "$INFO" = "" -o "$LATEST_VERSION" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" ]
 then
@@ -87,10 +89,8 @@ then
 
 	RELEASE_NOTES_URL=$(curl -sfL "$XML_FEED" \
 		| fgrep '<sparkle:releaseNotesLink>' \
-		| head -1 \
+		| tail -1 \
 		| sed 's#.*<sparkle:releaseNotesLink>##g ; s#</sparkle:releaseNotesLink>##g')
-
-	RELEASE_NOTES_URL=$(echo "$RELEASE_NOTES_URL" | sed 's#https:/180g#https://180g#g')
 
 	( echo "$NAME: Release Notes for $INSTALL_TO:t:r:\n" ;
 		lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines "$RELEASE_NOTES_URL";

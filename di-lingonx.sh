@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download latest version of Lingon 7+
+# Purpose: 	Download latest version of Lingon 9+
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2019-05-17
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2019-05-17
+# Verified:	2025-02-24
 
 NAME="$0:t:r"
 
@@ -14,7 +15,7 @@ fi
 
 INSTALL_TO='/Applications/Lingon X.app'
 
-FEED='https://www.peterborgapps.com/updates/lingonx7.plist'
+FEED='https://www.peterborgapps.com/updates/lingonx9.plist'
 
 LOCALFEED="${TMPDIR-/tmp}/${NAME}.$$.$RANDOM.plist"
 
@@ -24,7 +25,7 @@ LATEST_VERSION=$(defaults read ${LOCALFEED} version | tr -dc '[0-9]\.')
 
 LATEST_BUILD=$(defaults read ${LOCALFEED} build | tr -dc '[0-9]\.')
 
-URL='https://www.peterborgapps.com/downloads/LingonX7.zip'
+URL='https://www.peterborgapps.com/downloads/LingonX9.zip'
 
 RELEASE_NOTES=$(defaults read ${LOCALFEED} releaseNotes | sed 's#\\u2022#•#g')
 

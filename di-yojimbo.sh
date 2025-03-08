@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose:
+# Purpose:	Download and install/update the latest version of Yojimbo
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2021-01-27
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2021-01-27
+# Verified:	2025-02-22
 
 NAME="$0:t:r"
 
@@ -40,9 +41,6 @@ LATEST_VERSION=$(defaults read "$TEMPFILE" SUFeedEntryShortVersionString)
 LATEST_BUILD=$(defaults read "$TEMPFILE" SUFeedEntryVersion)
 
 MIN_VERSION=$(defaults read "$TEMPFILE" SUFeedEntryMinimumSystemVersion)
-
-OS_VER=$(sw_vers -productVersion)
-
 
 URL=$(defaults read "$TEMPFILE" SUFeedEntryDownloadURL)
 
@@ -96,7 +94,7 @@ then
 
 else
 
-	if (( $+commands[wget] )) && (( $+commands[html2text.py] ))
+	if (( $+commands[wget] )) && (( $+commands[html2text] ))
 	then
 
 		RELEASE_NOTES_URL="https://www.barebones.com/support/yojimbo/notes-$LATEST_VERSION.html"
@@ -108,7 +106,7 @@ else
 		RELEASE_NOTES=$(sed 's#<h2>#START_CUT_HERE\
 <h2>#g' "$TEMPFILE2" \
 			| sed 	-e '1,/START_CUT_HERE/d; /<\/div>/,$d' \
-			| html2text.py \
+			| html2text \
 			| sed 's#^ *##g')
 
 		echo "Yojimbo Version $LATEST_VERSION / ${LATEST_BUILD}\nURL: ${URL}\nRelease Notes URL: ${RELEASE_NOTES_URL}\n\n${RELEASE_NOTES}\n" \

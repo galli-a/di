@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
 # Purpose: Download and install the latest version of IINA from iina.io
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2019-04-02
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2019-04-02
+# Verified:	2025-02-13
 
 NAME="$0:t:r"
 
@@ -12,54 +13,41 @@ then
 	source "$HOME/.path"
 fi
 
-
 INSTALL_TO='/Applications/IINA.app'
 
 XML_FEED='https://www.iina.io/appcast.xml'
 
-INFO=("$(curl -sfLS "$XML_FEED" \
-	| tr -s '\n| |\t' ' ' \
-  	| sed -e 's#\s*<item>#TKTKTK#g' \
-  	| sed -e 's#</item>##g' \
- 	| sed -e 's#TKTKTK#\n#g' \
- 	| egrep '<pubDate>' \
-  	| head -n 1 \
- 	| tr -s ' ' '\n')")
+INFO=($(curl -sfLS "$XML_FEED" \
+	| awk '/<item>/{i++}i==1' \
+	| fgrep -v 'delta' \
+	| egrep '<sparkle:shortVersionString>|<sparkle:version>|<enclosure url|<sparkle:releaseNotesLink>' \
+	| tr '\n' ' '))
 
-# echo $INFO
+URL=$(echo "$INFO" | sed 's#.*enclosure url="##g ; s#" .*##g')
 
 LATEST_VERSION=$(echo "$INFO" \
-	| egrep '<sparkle:shortVersionString>' \
-	| sed -e 's#<sparkle:shortVersionString>##' \
-	| sed -e 's#</sparkle:shortVersionString>##')
-LATEST_BUILD=$(echo "$INFO" \
-	| egrep '<sparkle:version>' \
-	| sed -e 's#<sparkle:version>##' \
-	| sed -e 's#</sparkle:version>##')
-URL=$(echo "$INFO" \
-	| egrep 'url' \
-	| egrep -v 'delta' \
-	| sed -e 's#url="##' \
-	| sed -e 's#"##')
-RELEASE_NOTES_URL=$(echo "$INFO" \
-	| egrep '<sparkle:releaseNotesLink>' \
-	| sed -e 's#<sparkle:releaseNotesLink>##' \
-	| sed -e 's#</sparkle:releaseNotesLink>##')
+	| sed 	-e 's#.*<sparkle:shortVersionString>##g' \
+			-e 's#</sparkle:shortVersionString>.*##g')
 
-# echo $LATEST_BUILD
-# echo $LATEST_VERSION
-# echo $URL
-# echo $RELEASE_NOTES_URL
+LATEST_BUILD=$(echo "$INFO" \
+	| sed 	-e 's#.*<sparkle:version>##g' \
+			-e 's#</sparkle:version>.*##g')
 
 	# If any of these are blank, we cannot continue
 if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
+RELEASE_NOTES_URL=$(echo "$INFO" \
+	| sed 	-e 's#.*<sparkle:releaseNotesLink>##g' \
+			-e 's#</sparkle:releaseNotesLink>.*##g')
+
+# If any of these are blank, we cannot continue
+if [ "$INFO" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" -o "$LATEST_BUILD" = "" ]
 then
 	echo "$NAME: Error: bad data received:
 	INFO: $INFO
 	LATEST_VERSION: $LATEST_VERSION
 	LATEST_BUILD: $LATEST_BUILD
 	URL: $URL
-	"
+	"  >>/dev/stderr
 
 	exit 1
 fi
@@ -69,25 +57,19 @@ then
 
 	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
 
-	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
-
 	autoload is-at-least
 
 	is-at-least "$LATEST_VERSION" "$INSTALLED_VERSION"
 
 	VERSION_COMPARE="$?"
 
-	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
-
-	BUILD_COMPARE="$?"
-
-	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
+	if [ "$VERSION_COMPARE" = "0" ]
 	then
-		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION)"
 		exit 0
 	fi
 
-	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
+	echo "$NAME: Outdated: $INSTALLED_VERSION vs $LATEST_VERSION"
 
 	FIRST_INSTALL='no'
 
@@ -96,7 +78,7 @@ else
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.dmg"
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}.dmg"
 
 if (( $+commands[lynx] ))
 then

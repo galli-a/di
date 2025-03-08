@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install the latest version of Accordance 13 from <https://www.accordancebible.com>
+# Purpose: 	Download and install the latest version of Accordance 13 from <https://www.accordancebible.com>
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2015-11-02 (Last Verified: 2019-11-15)
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2015-11-02
+# Verified:	2025-02-16
 
 NAME="$0:t:r"
 
@@ -17,11 +18,11 @@ HOMEPAGE="https://www.accordancebible.com"
 
 DOWNLOAD_PAGE="https://www.accordancebible.com/Accordance-Installers"
 
-SUMMARY="Go deep into Bible study with Accordance 12. Access ancient wisdom and modern insights through an ever growing library of titles. Illuminate your research and teaching using intelligent tools in an easy-to-use, lightning-fast interface."
+SUMMARY="Go deep into Bible study with Accordance. Access ancient wisdom and modern insights through an ever growing library of titles. Illuminate your research and teaching using intelligent tools in an easy-to-use, lightning-fast interface."
 
 
 	# sparkle:version identical to sparkle:shortVersionString
-INFO=($(curl -sfL 'https://accordancefiles1.com/xml/appcast_13.xml' \
+INFO=($(curl -sfL 'https://accordancefiles1.com/xml/appcast_14.xml' \
 		| tr ' ' '\012' \
 		| egrep '^(url|sparkle:shortVersionString)=' \
 		| head -2 \

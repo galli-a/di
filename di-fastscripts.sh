@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install the latest version of FastScripts from https://red-sweater.com/fastscripts/
+# Purpose: 	Download and install the latest version of FastScripts from https://red-sweater.com/fastscripts/
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2018-08-11
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2018-08-11
+# Verified:	2025-02-16
 
 NAME="$0:t:r"
 
@@ -20,7 +21,7 @@ then
 	source "$HOME/.path"
 fi
 
-XML_FEED="https://www.red-sweater.com/fastscripts/appcast2.php"
+XML_FEED="https://www.red-sweater.com/fastscripts/appcast3.php"
 
 INFO=($(curl -sfL "${XML_FEED}" \
 		| tr -s ' ' '\012' \
@@ -93,7 +94,7 @@ FILENAME="$HOME/Downloads/$INSTALL_TO:t:r-${LATEST_VERSION}_${LATEST_BUILD}.zip"
 if (( $+commands[lynx] ))
 then
 
-	RELEASE_NOTES_URL="https://www.red-sweater.com/fastscripts/appcast2.php"
+	RELEASE_NOTES_URL="$XML_FEED"
 
 	( echo -n "$NAME: Release Notes for " ;
 	curl -sfL "$RELEASE_NOTES_URL" \

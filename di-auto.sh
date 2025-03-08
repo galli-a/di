@@ -4,6 +4,7 @@
 # From: 	Alister Forbes
 # Mail:		di at superbimble dot com
 # Date: 	2016-05-21
+# Verified:	2025-03-06
 #
 # Updated by TJ Luoma (luomat at gmail dot com) on 2018-08-06
 #
@@ -147,7 +148,7 @@ do
 	#check to ignore di-all.sh and di-auto.sh
 	if ! [[ "$i:t" =~ "di-(all|auto)\.sh" ]]
 	then
-		# echo "\n\n---: [Debug] Starting $i: \n"
+		echo "\n\n---: [Debug] Starting $i: \n"
 
 			# get the full path to $i
 		i=($i(:A))

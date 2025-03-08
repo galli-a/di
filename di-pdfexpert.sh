@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install the latest version of PDF Expert
+# Purpose: 	Download and install the latest version of PDF Expert
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2018-11-14
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2018-11-14
+# Verified:	2025-02-24 [but gives us version 2 not version 3 - @TODO]
 
 NAME="$0:t:r"
 
@@ -21,6 +22,7 @@ INSTALL_TO='/Applications/PDF Expert.app'
 	# XML_FEED='https://readdle-test-binaries.s3.amazonaws.com/release/appcast.xml'
 
 	## this is current as of 2020-06-25
+	## 2025-02-24 - this gives us version 2 not version 3
 XML_FEED='https://downloads.pdfexpert.com/release/appcast.xml'
 
 RELEASE_NOTES_URL='https://pdfexpert.com/changelog.html'

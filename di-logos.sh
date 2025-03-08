@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download Logos 9
+# Purpose: 	Download latest version of Logos Bible study software
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2018-08-20
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2018-08-20
+# Verified:	2025-03-03
 
 [[ -e "$HOME/.path" ]] && source "$HOME/.path"
 
@@ -12,7 +13,9 @@
 INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Logos.app"
 
 	# No RELEASE_NOTES_URL available in XML_FEED or elsewhere, as far as I can find
-XML_FEED='https://clientservices.logos.com/update/v1/feed/logos9-mac/stable.xml'
+# XML_FEED='https://clientservices.logos.com/update/v1/feed/logos9-mac/stable.xml'
+
+XML_FEED='https://clientservices.logos.com/update/v1/feed/logos10-mac/stable.xml'
 
 NAME="$0:t:r"
 
@@ -23,21 +26,10 @@ DOWNLOAD_PAGE=$(curl -sfLS "$XML_FEED" \
 
 SUMMARY="Logos helps you discover, understand, and share more of the biblical insights you crave."
 
-INFO=($(curl -sfL "$XML_FEED" \
-| tidy \
-        --char-encoding utf8 \
-        --force-output yes \
-        --input-xml yes \
-        --markup yes \
-        --output-xhtml no \
-        --output-xml yes \
-        --quiet yes \
-        --show-errors 0 \
-        --show-warnings no \
-        --wrap 0 \
-| egrep "^<link href='" \
-| head -1 \
-| awk -F"'" '/^/{print $2" "$4}'))
+INFO=($(curl -sfLS "$XML_FEED" | sed 's#><#>\
+<#g' | awk '/<entry/{i++}i==1' \
+| egrep 'LogosMac-arm.dmg|<logos:version>' \
+| sed -e 's#.*http#http#g' -e 's#.dmg.*#.dmg#g' -e 's#<logos:version>##g' -e 's#</logos:version>##g'))
 
 URL="$INFO[1]"
 

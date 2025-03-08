@@ -1,9 +1,10 @@
 #!/usr/bin/env zsh -f
-# Purpose: download and install the latest version of Nova (formerly Coda)
+# Purpose:	Download and install the latest version of Nova (formerly Coda)
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2021-03-19
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2021-03-19
+# Verified:	2025-02-21
 
 NAME="$0:t:r"
 
@@ -95,14 +96,14 @@ then
 
 else
 
-	if (( $+commands[wget] )) && (( $+commands[html2text.py] ))
+	if (( $+commands[wget] )) && (( $+commands[html2text] ))
 	then
 
 		TEMPFILE="${TMPDIR-/tmp/}${NAME}.${TIME}.$$.$RANDOM.html"
 
 		wget --quiet --convert-links --output-document="$TEMPFILE" "$RELEASE_NOTES_URL"
 
-		RELEASE_NOTES=$(awk '/<div class="release"/{i++}i==1' "$TEMPFILE" | html2text.py | sed 's#^ *##g')
+		RELEASE_NOTES=$(awk '/<div class="release"/{i++}i==1' "$TEMPFILE" | html2text | sed 's#^ *##g')
 
 		echo "${RELEASE_NOTES}\n\nSource: ${RELEASE_NOTES_URL}\nVersion: ${LATEST_VERSION} / ${LATEST_BUILD}\nURL: ${URL}" | tee "$RELEASE_NOTES_TXT"
 

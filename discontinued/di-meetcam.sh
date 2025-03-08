@@ -1,104 +1,45 @@
 #!/usr/bin/env zsh -f
-# Purpose: version 5
+# Purpose:
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
-# Date:	2021-09-20
-
-autoload is-at-least
+# Date:	2021-02-05
 
 NAME="$0:t:r"
 
-[[ -e "$HOME/.path" ]] && source "$HOME/.path"
-
-[[ -e "$HOME/.config/di/defaults.sh" ]] && source "$HOME/.config/di/defaults.sh"
-
-INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Bartender 5.app"
-
-XML_FEED='https://www.macbartender.com/B2/updates/AppcastB5.xml'
-
-	# replace newlines, spaces, tabs, with one space
-	# replace everything up to <item>
-	# replace everything after </item>
-	# replace the space in "> <" with a new line
-	# replace all spaces with newlines
-	# replace sparkle into with 'this'="foo" instead of <this>foo</this>
-	# sort lines to get consistent output order
-	# egrep to get just the lines we want
-	# use awk to get just the values and not the fields
-
-# INFO=($(curl -sfLS "$XML_FEED" \
-# 	| tr -s '\012| |\t' ' ' \
-# 	| sed 	-e 's#.*<item>##g' \
-# 		-e 's#</item>.*##g' \
-# 		-e 's#> <#>\
-# <#g' -e 's# #\
-# #g' -e 's#<sparkle:minimumSystemVersion>#sparkle:minimumSystemVersion="#g' \
-# 		-e 's#</sparkle:minimumSystemVersion>#"#g' \
-# 		-e 's#<sparkle:releaseNotesLink>#sparkle:releaseNotesLink="#g' \
-# 		-e 's#</sparkle:releaseNotesLink>#"#g' \
-# 	| sort \
-# 	| egrep 'sparkle:version|sparkle:shortVersionString|sparkle:releaseNotesLink|sparkle:minimumSystemVersion|url' \
-# 	| awk -F'"' '{print $2}' ))
-
-INFO=("$(curl -sfLS "$XML_FEED" \
-	| tr -s '\n| |\t' ' ' \
- 	| sed -e 's#\s*<item>#TKTKTK#g' \
- 	| sed -e 's#</item>##g' \
- 	| sed -e 's#TKTKTK#\n#g' \
- 	| egrep '<title>' \
- 	| tail -n 1 \
- 	| tr -s ' ' '\n')")
-
-MIN_VERSION=$(echo "$INFO" \
-	| egrep '<sparkle:minimumSystemVersion>.*</sparkle:minimumSystemVersion>' \
-	| tr -dc '[0-9]\.')
-RELEASE_NOTES_URL=$(echo "$INFO" \
-	| egrep '<sparkle:releaseNotesLink>' \
-	| sed -e 's#<sparkle:releaseNotesLink>##' \
-	| sed -e 's#</sparkle:releaseNotesLink>##')
-LATEST_VERSION=$(echo "$INFO" \
-	| egrep '<sparkle:shortVersionString>' \
-	| sed -e 's#<sparkle:shortVersionString>##' \
-	| sed -e 's#</sparkle:shortVersionString>##')
-LATEST_BUILD=$(echo "$INFO" \
-	| egrep '<sparkle:version>' \
-	| sed -e 's#<sparkle:version>##' \
-	| sed -e 's#</sparkle:version>##')
-URL=$(echo "$INFO" \
-	| egrep 'url' \
-	| sed -e 's#url="##' \
-	| sed -e 's#"##')
-
-	# If any of these are blank, we cannot continue
-if [ "$INFO" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" -o "$LATEST_BUILD" = "" ]
+if [[ -e "$HOME/.path" ]]
 then
-	echo "$NAME: Error: bad data received:
-	INFO: $INFO
-	LATEST_VERSION: $LATEST_VERSION
-	LATEST_BUILD: $LATEST_BUILD
-	URL: $URL
-	"  >>/dev/stderr
-
-	exit 1
+	source "$HOME/.path"
 fi
 
-ACTUAL_VERSION=$(sw_vers -productVersion)
+INSTALL_TO='/Applications/Meet Cam.app'
 
-is-at-least "$MIN_VERSION" "$ACTUAL_VERSION"
+XML_FEED='https://downloads.meet.cam/updates/appcast.xml'
 
-EXIT="$?"
+INFO=($(curl -sfLS "$XML_FEED" \
+	| tr -s '\t|\n| ' ' ' \
+| sed -e 's#.*<item>##g' -e 's# </item>.*##g' -e 's#> <#>\
+<#g' -e 's# url=#\
+url=#g' -e 's# sparkle:#\
+sparkle:#g' \
+	-e 's#</sparkle:minimumSystemVersion>#"#g' \
+	-e 's#<sparkle:releaseNotesLink>#sparkle:releaseNotesLink="#g' \
+	-e 's#</sparkle:releaseNotesLink>#"#g' \
+	-e 's# length=.*##g' \
+	-e 's#<sparkle:minimumSystemVersion>#sparkle:minimumSystemVersion="#' \
+	| egrep 'sparkle:|^url=' \
+	| sort \
+	| awk -F'"' '//{print $2}'))
 
-if [[ "$EXIT" == "1" ]]
-then
-	echo "$NAME: '$INSTALL_TO:t' requires '$MIN_VERSION' to install but you are running '$ACTUAL_VERSION'." >>/dev/stderr
-
-	exit 2
-fi
+MINVERSION="$INFO[1]"
+RELEASE_NOTES_URL="$INFO[2]"
+LATEST_VERSION="$INFO[3]"
+LATEST_BUILD="$INFO[4]"
+URL="$INFO[5]"
 
 if [[ -e "$INSTALL_TO" ]]
 then
- 
+
 	INSTALLED_VERSION=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleShortVersionString)
 
 	INSTALLED_BUILD=$(defaults read "${INSTALL_TO}/Contents/Info" CFBundleVersion)
@@ -112,7 +53,7 @@ then
 	is-at-least "$LATEST_BUILD" "$INSTALLED_BUILD"
 
 	BUILD_COMPARE="$?"
- 
+
 	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
 	then
 		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
@@ -135,7 +76,7 @@ else
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="${DOWNLOAD_DIR_ALTERNATE-$HOME/Downloads}/Bartender-${${LATEST_VERSION}// /}_${${LATEST_BUILD}// /}.zip"
+FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}_${${LATEST_BUILD}// /}.zip"
 
 RELEASE_NOTES_TXT="$FILENAME:r.txt"
 
@@ -146,15 +87,21 @@ then
 
 else
 
-	if (( $+commands[html2text.py] ))
+	if (( $+commands[lynx] ))
 	then
-			# html2text.py will give us something like markdown
-			# uniq will make sure we don't have more than one blank line in a row
-		RELEASE_NOTES=$(curl -sfLS "$RELEASE_NOTES_URL" | html2text.py | uniq)
+
+		RELEASE_NOTES=$(curl -sfLS "$RELEASE_NOTES_URL" \
+| awk '/<div class="release">/{i++}i==1' \
+| lynx -dump -width='10000' -display_charset=UTF-8 -assume_charset=UTF-8 -pseudo_inlines -stdin -nomargins \
+| sed 's#  \* #\
+\#\# #g')
+
+#### Do Not Indent
 
 		echo "${RELEASE_NOTES}\n\nSource: ${RELEASE_NOTES_URL}\nVersion: ${LATEST_VERSION} / ${LATEST_BUILD}\nURL: ${URL}" | tee "$RELEASE_NOTES_TXT"
 
 	fi
+
 fi
 
 echo "$NAME: Downloading '$URL' to '$FILENAME':"
@@ -264,7 +211,7 @@ else
 	exit 1
 fi
 
-[[ "$LAUNCH" = "yes" ]] && open "$INSTALL_TO"
+[[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
 exit 0
 #EOF

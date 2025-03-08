@@ -1,33 +1,36 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install/update the latest version of Acron
+# Purpose: 	Download and install the latest version of Acorn 8
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2019-10-24
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2025-02-15
+# Verified:	2025-02-15
 
-[[ -e "$HOME/.path" ]] && source "$HOME/.path"
+NAME="$0:t:r"
+
+if [[ -e "$HOME/.path" ]]
+then
+	source "$HOME/.path"
+fi
 
 [[ -e "$HOME/.config/di/defaults.sh" ]] && source "$HOME/.config/di/defaults.sh"
 
 INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Acorn.app"
 
-NAME="$0:t:r"
+XML_FEED='https://www.flyingmeat.com/download/acorn8update.xml'
 
-	## Only the most recent version is in feed
-XML_FEED="https://www.flyingmeat.com/download/acorn7update.xml"
+INFO=$(curl -sfLS "$XML_FEED")
 
-	# save XML_FEED locally so we can refer to it without having to download it multiple times
-TEMPFILE="${TMPDIR-/tmp}/${NAME}.${TIME}.$$.$RANDOM.xml"
+LATEST_BUILD=$(echo "$INFO" \
+	| tr '\012' ' ' \
+	| sed -e 's#.*sparkle:version="##g' -e 's#".*##g')
 
-curl -sfLS "$XML_FEED" > "$TEMPFILE"
+LATEST_VERSION=$(echo "$INFO" \
+	| tr '\012' ' ' \
+	| sed -e 's#.*sparkle:shortVersionString="##g' -e 's#".*##g')
 
-INFO=($(awk '/<enclosure /{i++}i==1' "$TEMPFILE" | tr ' ' '\012' | egrep '^(url|sparkle:(shortVersionString|version))="' | sort | tr '"' ' ' | awk '{print $NF}'))
-
-LATEST_VERSION="$INFO[1]"
-
-LATEST_BUILD="$INFO[2]"
-
-URL="$INFO[3]"
+	# URL does not change per-release
+URL='https://s3.amazonaws.com/flyingmeat/Acorn8.zip'
 
 if [[ -e "$INSTALL_TO" ]]
 then
@@ -56,12 +59,19 @@ then
 
 	FIRST_INSTALL='no'
 
+	if [[ ! -w "$INSTALL_TO" ]]
+	then
+		echo "$NAME: '$INSTALL_TO' exists, but you do not have 'write' access to it, therefore you cannot update it." >>/dev/stderr
+
+		exit 2
+	fi
+
 else
 
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.zip"
+FILENAME="${DOWNLOAD_DIR_ALTERNATE-$HOME/Downloads}/${${INSTALL_TO:t:r}// /}-${${LATEST_VERSION}// /}_${${LATEST_BUILD}// /}.zip"
 
 RELEASE_NOTES_TXT="$FILENAME:r.txt"
 
@@ -75,40 +85,15 @@ else
 	if (( $+commands[lynx] ))
 	then
 
-			# we are either going to use this once (if we also have 'html2text.py')
-			# or twice if we do not
+		RELEASE_NOTES=$(echo "$INFO" \
+				| sed -e '1,/&lt;div class="releaseNotes"&gt/d' \
+					  -e '/&lt;\/body&gt;/,$d' \
+				| lynx -dump -width='10000' -display_charset=UTF-8 -assume_charset=UTF-8 -pseudo_inlines -stdin  -nomargins -nonumbers \
+				| lynx -dump -width='10000' -display_charset=UTF-8 -assume_charset=UTF-8 -pseudo_inlines -stdin  -nomargins -nonumbers
+		)
 
-		alias lynx_dump='lynx -dump -nomargins -width=10000 -assume_charset=UTF-8 -display_charset=UTF-8 -pseudo_inlines -stdin'
-
-		if (( $+commands[html2text.py] ))
-		then
-
-			alias final_cmd='html2text.py'
-
-		else
-
-			alias final_cmd='lynx_dump'
-
-		fi
-
-			# Putting this tidy command in the RELEASE_NOTES section was just too ugly for me
-			# normally I would put this in a tidy config file, but I want this to be self-contained
-			# but having it separate allows it to be modified easier later on
-			# I tried to group all the 'no' and all of the 'yes' together
-			# with all of the other options in the first line
-		alias tidy_up_html='tidy --char-encoding utf8 --wrap 0 --show-errors 0 \
-				--tidy-mark no --input-xml no --output-xml no --quote-nbsp no --show-warnings no --uppercase-attributes no --uppercase-tags no \
-				--clean yes --force-output yes --join-classes yes --join-styles yes --indent yes --markup yes --output-xhtml yes \
-				--quiet yes --quote-ampersand yes --quote-marks yes'
-
-		RELEASE_NOTES=$(awk '/<description>/{i++}i==2' "$TEMPFILE" \
-			| sed -e '/<\/description>/,$d' -e 's#<description>##g' \
-			| lynx_dump \
-			| tidy_up_html \
-			| final_cmd )
-
-			echo "${RELEASE_NOTES}\n\nSource: ${XML_FEED}\nVersion: ${LATEST_VERSION} / ${LATEST_BUILD}\nURL: ${URL}" \
-			| tee "$RELEASE_NOTES_TXT"
+		echo "${RELEASE_NOTES}\n\nSource: ${XML_FEED}\nVersion: ${LATEST_VERSION} / ${LATEST_BUILD}\nURL: ${URL}" \
+		| tee "$RELEASE_NOTES_TXT"
 
 	fi
 
@@ -136,11 +121,13 @@ then
 	(cd "$FILENAME:h" ; \
 	echo "\n\nLocal sha256:" ; \
 	shasum -a 256 "$FILENAME:t" \
-	) >>| "$FILENAME:r.txt"
+	)  >>| "$FILENAME:r.txt"
 fi
 
 
-## make sure that the .zip is valid before we proceed
+TEMPDIR=$(mktemp -d "${TMPDIR-/tmp/}${NAME-$0:r}-XXXXXXXX")
+
+	## make sure that the .zip is valid before we proceed
 (command unzip -l "$FILENAME" 2>&1 )>/dev/null
 
 EXIT="$?"
@@ -152,16 +139,16 @@ then
 else
 	echo "$NAME: '$FILENAME' is an invalid zip file (\$EXIT = $EXIT)"
 
-	mv -fv "$FILENAME" "$HOME/.Trash/"
+	mv -fv "$FILENAME" "$TEMPDIR/"
 
-	mv -fv "$FILENAME:r".* "$HOME/.Trash/"
+	mv -fv "$FILENAME:r".* "$TEMPDIR/"
 
 	exit 0
 
 fi
 
-## unzip to a temporary directory
-UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
+	## unzip to a temporary directory
+UNZIP_TO=$(mktemp -d "${TEMPDIR}/${NAME}-XXXXXXXX")
 
 echo "$NAME: Unzipping '$FILENAME' to '$UNZIP_TO':"
 
@@ -186,16 +173,16 @@ then
 	&& LAUNCH='yes' \
 	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
 
-	echo "$NAME: Moving existing (old) '$INSTALL_TO' to '$HOME/.Trash/'."
+	echo "$NAME: Moving existing (old) '$INSTALL_TO' to '$TEMPDIR/'."
 
-	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
+	mv -f "$INSTALL_TO" "$TEMPDIR/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
 
 	EXIT="$?"
 
 	if [[ "$EXIT" != "0" ]]
 	then
 
-		echo "$NAME: failed to move existing $INSTALL_TO to $HOME/.Trash/"
+		echo "$NAME: failed to move existing '$INSTALL_TO' to '$TEMPDIR'."
 
 		exit 1
 	fi
@@ -204,7 +191,7 @@ fi
 echo "$NAME: Moving new version of '$INSTALL_TO:t' (from '$UNZIP_TO') to '$INSTALL_TO'."
 
 	# Move the file out of the folder
-mv -vn "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
+mv -n "$UNZIP_TO/$INSTALL_TO:t" "$INSTALL_TO"
 
 EXIT="$?"
 
@@ -222,4 +209,5 @@ fi
 [[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
 exit 0
+#
 #EOF

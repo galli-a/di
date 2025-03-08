@@ -1,21 +1,11 @@
 #!/usr/bin/env zsh -f
-# Purpose: Download and install latest BitTorrent Sync (aka Resilio Sync)
+# Purpose: Download and install latest version of Resilio Sync
 #
 # From:	Tj Luo.ma
 # Mail:	luomat at gmail dot com
 # Web: 	http://RhymesWithDiploma.com
 # Date:	2014-10-11
-
-	# 2018-08-02 - this is what the newest version available calls itself
-#INSTALL_TO='/Applications/BitTorrent Sync.app'
-
-INSTALL_TO='/Applications/Resilio Sync.app'
-
-HOMEPAGE="https://www.resilio.com"
-
-DOWNLOAD_PAGE="https://download-cdn.resilio.com/stable/osx/Resilio-Sync.dmg"
-
-SUMMARY="Sync any folder to all your devices. Sync photos, videos, music, PDFs, docs or any other file types to/from your mobile phone, laptop, or NAS."
+# @TODO - not sure this works anymore for a clean install or an update
 
 if [[ -e "$HOME/.path" ]]
 then
@@ -23,6 +13,39 @@ then
 fi
 
 NAME="$0:t:r"
+
+echo "$NAME: need to check this once an update is available"
+
+exit 1
+
+#### On 2025-02-26 I captured this via Proxyman doing a manual check for updates.
+##
+## curl -sfLS "https://update.resilio.com/cfu.php?forced=1&arch=arm64&b=sync&cc=0&cid=JqgmmEU5PGFq9GEV&lang=en&lpnum=8&lponline=4&lpv_1=34013187&lpv_1_n=1&lpv_2=50331650&lpv_2_n=4&pl=mac&rn=10&support_id=o-V3GStR&sysver=15.3.1&tbd=3287742400&tbu=2354291046&v=50331650&wsu=0"
+#
+## Which gave me this response. But will it work in a day/week/month?
+#
+# <?xml version="1.0" encoding="utf-8"?>
+# <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"  xmlns:dc="http://purl.org/dc/elements/1.1/">
+#   <channel>
+#     <title>Resilio Sync</title>
+#     <description>No update available.</description>
+#     <language>en</language>
+#     <item>
+#         <title>Resilio Sync 3.0.2</title>
+# 		<link>https://resilio.com</link>
+#         <sparkle:version>3.0.2</sparkle:version>
+#     </item>
+#   </channel>
+#  </rss>
+
+INSTALL_TO='/Applications/Resilio Sync.app'
+
+HOMEPAGE="https://www.resilio.com"
+
+DOWNLOAD_PAGE='https://download-cdn.resilio.com/stable/mac/osx/0/Resilio-Sync.dmg'
+
+SUMMARY="Sync any folder to all your devices. Sync photos, videos, music, PDFs, docs or any other file types to/from your mobile phone, laptop, or NAS."
+
 
 zmodload zsh/datetime
 
@@ -38,22 +61,28 @@ function log { echo "$NAME [`timestamp`]: $@" | tee -a "$LOG" }
 TEMPFILE="${TMPDIR-/tmp}/${NAME}.${TIME}.$$.$RANDOM"
 
 	# 2020-05-09 new update!
-XML_FEED='https://update.resilio.com/cfu.php?forced=1&b=sync&lang=en&pl=mac&rn=81&sysver=10.15.4&v=33957721'
+	# 2025-02-27 - this feed shows 2.x not 3.x updates
+# XML_FEED='https://update.resilio.com/cfu.php?forced=1&b=sync&lang=en&pl=mac&rn=81&sysver=10.15.4&v=33957721'
+#
+# 	# both Sparkle versions are identical
+# INFO=($(curl -sfLS \
+# 	-H "Accept: application/rss+xml,*/*;q=0.1" \
+# 	-H "Accept-Language: en-us" \
+# 	-H "User-Agent: Resilio Sync/2.6.10073 Sparkle/1.16.0" \
+# 	"${XML_FEED}" \
+# 	| egrep -i 'releasenoteslink>|url=|sparkle:version=' \
+# 	| sort \
+# 	| tr -d '\r' \
+# 	| sed -e 's#.*="##g' -e 's#"$##g' -e 's#.*<sparkle:releaseNotesLink>##g' -e 's#</sparkle:releaseNotesLink>##g' -e 's#amp\;##g'))
+#
+##################################################
 
-	# both Sparkle versions are identical
-INFO=($(curl -sfLS \
-	-H "Accept: application/rss+xml,*/*;q=0.1" \
-	-H "Accept-Language: en-us" \
-	-H "User-Agent: Resilio Sync/2.6.10073 Sparkle/1.16.0" \
-	"${XML_FEED}" \
-	| egrep -i 'releasenoteslink>|url=|sparkle:version=' \
-	| sort \
-	| tr -d '\r' \
-	| sed -e 's#.*="##g' -e 's#"$##g' -e 's#.*<sparkle:releaseNotesLink>##g' -e 's#</sparkle:releaseNotesLink>##g' -e 's#amp\;##g'))
 
 LATEST_VERSION="$INFO[1]"
 
-URL="$INFO[2]"
+# URL="$INFO[2]"
+
+URL='https://download-cdn.resilio.com/stable/mac/osx/0/Resilio-Sync.dmg'
 
 RELEASE_NOTES_URL="$INFO[3]"
 

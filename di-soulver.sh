@@ -1,43 +1,39 @@
 #!/usr/bin/env zsh -f
-# Purpose: download Soulver 3 from https://soulver.app
+# Purpose: 	Download and install the latest version of Soulver from <http://www.acqualia.com/soulver/>
 #
-# From:	Timothy J. Luoma
-# Mail:	luomat at gmail dot com
-# Date:	2019-06-08
+# From:		Timothy J. Luoma
+# Mail:		luomat at gmail dot com
+# Date:		2016-01-19
+# Verified:	2025-02-23
+
+[[ -e "$HOME/.path" ]] && source "$HOME/.path"
+
+[[ -e "$HOME/.config/di/defaults.sh" ]] && source "$HOME/.config/di/defaults.sh"
+
+INSTALL_TO="${INSTALL_DIR_ALTERNATE-/Applications}/Soulver 3.app"
 
 NAME="$0:t:r"
 
-if [[ -e "$HOME/.path" ]]
-then
-	source "$HOME/.path"
-fi
+HOMEPAGE="https://www.acqualia.com/soulver/"
 
-# @TODO - this was out of date 2020-03-20
+DOWNLOAD_PAGE="https://www.acqualia.com/soulver/download"
 
-#echo "$NAME: Does not work, format of XML_FEED changed"
+SUMMARY="Soulver helps you work things out. It's quicker to use than a spreadsheet, and smarter and clearer than a traditional calculator. Use Soulver to play around with numbers, do 'back of the envelope' quick calculations, and solve day-to-day problems."
 
-#exit 1
+XML_FEED="https://soulver.app/mac/sparkle/appcast.xml"
 
-XML_FEED='https://soulver.app/mac/sparkle/appcast.xml'
+INFO=$(curl -sfL "$XML_FEED" \
+		| fgrep -vi 'sparkle:delta' \
+		| awk '/<item>/{i++}i==1' \
+		| tr -s '\012' ' ')
 
-INSTALL_TO='/Applications/Soulver 3.app'
+LATEST_VERSION=$(echo "$INFO" | sed 's#.*<sparkle:shortVersionString>##g ; s#</sparkle:shortVersionString>.*##g')
 
-INFO=($(curl -sfL "$XML_FEED" \
- 	| fgrep -vi 'delta' \
- 	| tr -s ' \t' '\n' \
- 	| egrep '^(<sparkle:version>|url=|<sparkle:shortVersionString>)' \
- 	| head -3 \
- 	| sort \
- 	| tr '>' '"' \
- 	| awk -F'"' '/^/{print $2}' \
-	| tr '<' '"' \
-	| awk -F'"' '/^/{print $1}'))
+LATEST_BUILD=$(echo "$INFO" | sed 's#.*<sparkle:version>##g ; s#</sparkle:version>.*##g')
 
-LATEST_VERSION="$INFO[1]"
+RELEASE_NOTES_URL=$(echo "$INFO" | sed 's#.*<sparkle:releaseNotesLink>##g ; s#</sparkle:releaseNotesLink>.*##g')
 
-LATEST_BUILD="$INFO[2]"
-
-URL="$INFO[3]"
+URL=$(echo "$INFO" | sed 's#.* <enclosure url="##g; s#" .*##g')
 
 	# If any of these are blank, we should not continue
 if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
@@ -71,13 +67,22 @@ then
 
 	if [ "$VERSION_COMPARE" = "0" -a "$BUILD_COMPARE" = "0" ]
 	then
-		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD)"
+		echo "$NAME: Up-To-Date ($INSTALLED_VERSION/$INSTALLED_BUILD)"
 		exit 0
 	fi
 
 	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
 
 	FIRST_INSTALL='no'
+
+	if [[ -e "$INSTALL_TO/Contents/_MASReceipt/receipt" ]]
+	then
+		echo "$NAME: $INSTALL_TO was installed from the Mac App Store and cannot be updated by this script."
+		echo "	See <https://apps.apple.com/us/app/soulver-3/id1508732804> or"
+		echo "	<macappstore://apps.apple.com/us/app/soulver-3/id1508732804"
+		echo "	Please use the App Store app to update it: <macappstore://showUpdatesPage?scan=true>"
+		exit 0
+	fi
 
 else
 
@@ -88,11 +93,6 @@ FILENAME="$HOME/Downloads/Soulver-${LATEST_VERSION}_${LATEST_BUILD}.zip"
 
 if (( $+commands[lynx] ))
 then
-
-	RELEASE_NOTES_URL=$(curl -sfL "$XML_FEED" \
-						| fgrep  '<sparkle:releaseNotesLink>' \
-						| tail -1 \
-						| sed 's#<sparkle:releaseNotesLink>##g; s#</sparkle:releaseNotesLink>##g')
 
 	( echo "$NAME: Release Notes for $INSTALL_TO:t:r:\n" ;
 		(curl -sfL "$RELEASE_NOTES_URL" | sed '1,/<body>/d; /<\/ul>/,$d' ; echo '</ul>') \
@@ -112,27 +112,6 @@ EXIT="$?"
 [[ ! -e "$FILENAME" ]] && echo "$NAME: $FILENAME does not exist." && exit 0
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
-
-(cd "$FILENAME:h" ; echo "\n\nLocal sha256:" ; shasum -a 256 "$FILENAME:t" ) >>| "$FILENAME:r.txt"
-
-MIN_REQUIRED='10.14.4'
-
-OS_VER=$(SYSTEM_VERSION_COMPAT=1 sw_vers -productVersion)
-
-autoload is-at-least
-
-is-at-least "$MIN_REQUIRED" "$OS_VER"
-
-EXIT="$?"
-
-if [[ "$EXIT" = "1" ]]
-then
-
-	echo "\n\n$NAME: '$INSTALL_TO:t' requires '$MIN_REQUIRED' but this Mac is running '$OS_VER'. The file has been downloaded, but will not be installed:\n${FILENAME}\n"
-
-	exit 1
-
-fi
 
 UNZIP_TO=$(mktemp -d "${TMPDIR-/tmp/}${NAME}-XXXXXXXX")
 
@@ -161,7 +140,7 @@ then
 
 	echo "$NAME: Moving existing (old) '$INSTALL_TO' to '$HOME/.Trash/'."
 
-	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.$RANDOM.app"
+	mv -vf "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.$INSTALLED_VERSION.app"
 
 	EXIT="$?"
 
@@ -195,4 +174,4 @@ fi
 [[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
 exit 0
-#EOF
+EOF

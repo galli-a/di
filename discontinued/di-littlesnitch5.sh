@@ -1,42 +1,63 @@
 #!/usr/bin/env zsh -f
-# Purpose: get the Nightly version of Brave
+# Purpose: Download and install LittleSnitch version 5
 #
 # From:	Timothy J. Luoma
 # Mail:	luomat at gmail dot com
-# Date:	2020-07-01
-
-	# must be in /Applications/ for 1Password
-INSTALL_TO='/Applications/Brave Browser Nightly.app'
-
-XML_FEED='https://updates.bravesoftware.com/sparkle/Brave-Browser/nightly/appcast.xml'
+# Date:	2020-11-14
 
 NAME="$0:t:r"
+
+INSTALL_TO='/Applications/Little Snitch.app'
+
+HOMEPAGE="https://www.obdev.at/products/littlesnitch/index.html"
+
+DOWNLOAD_PAGE="https://www.obdev.at/products/littlesnitch/download.html"
+
+SUMMARY="As soon as you’re connected to the Internet, applications can potentially send whatever they want to wherever they want. Most often they do this to your benefit. But sometimes, like in case of tracking software, trojans or other malware, they don’t. But you don’t notice anything, because all of this happens invisibly under the hood. Little Snitch makes these Internet connections visible and puts you back in control."
+
+ 	## if you want to install beta releases
+ 	## create a file (empty, if you like) using this file name/path:
+ 	##
+ 	## NOTE: Not sure if this works for LittleSnitch v5 yet
+ 	##
+# PREFERS_BETAS_FILE="$HOME/.config/di/prefers/littlesnitch-betas.txt"
+#
+# if [[ -e "$PREFERS_BETAS_FILE" ]]
+# then
+# 		This is for betas
+# 	HEAD_OR_TAIL='tail'
+# 	NAME="$NAME (beta releases)"
+# else
+# 		This is for official, non-beta versions
+# 	HEAD_OR_TAIL='head'
+# fi
 
 if [[ -e "$HOME/.path" ]]
 then
 	source "$HOME/.path"
 fi
 
-HOMEPAGE="https://brave.com"
+XML_FEED="https://sw-update.obdev.at/update-feeds/littlesnitch5.plist"
 
-DOWNLOAD_PAGE="https://brave.com/download/"
+HEAD_OR_TAIL='head'
 
-SUMMARY="Much more than a browser, Brave is a new way of thinking about how the web works."
+RELEASE_NOTES_URL=$(curl -sfL "$XML_FEED" \
+	| fgrep -A1 "<key>ReleaseNotesURL</key>" \
+	| awk -F'>|<' '/string/{print $3}' \
+	| ${HEAD_OR_TAIL} -1)
 
-RELEASE_NOTES_URL='https://github.com/brave/brave-browser/blob/master/CHANGELOG_DESKTOP.md'
+INFO=($(curl -sfL "$XML_FEED" \
+		| egrep -A1 'BundleShortVersionString|BundleVersion|DownloadURL' \
+		| fgrep '<string>' \
+		| ${HEAD_OR_TAIL} -3 \
+		| sort \
+		| sed 's#.*<string>##g; s#</string>##g'))
 
-INFO=$(curl -sfLS "$XML_FEED" \
-| tr -s '\012' ' ' \
-| sed 's# <item> #\
-<item>#g' \
-| egrep '^<item>' \
-| tail -1)
+LATEST_VERSION="$INFO[1]"
 
-URL=$(echo "$INFO" | sed 's#.*enclosure url="##g ; s#".*##g')
+LATEST_BUILD="$INFO[2]"
 
-LATEST_BUILD=$(echo "$INFO" | sed 's#.* sparkle:version="##g ; s#".*##g')
-
-LATEST_VERSION=$(echo "$INFO" | sed 's#.* sparkle:shortVersionString="##g ; s#".*##g')
+URL="$INFO[3]"
 
 	# If any of these are blank, we cannot continue
 if [ "$INFO" = "" -o "$LATEST_BUILD" = "" -o "$URL" = "" -o "$LATEST_VERSION" = "" ]
@@ -76,26 +97,25 @@ then
 
 	echo "$NAME: Outdated: $INSTALLED_VERSION/$INSTALLED_BUILD vs $LATEST_VERSION/$LATEST_BUILD"
 
-	FIRST_INSTALL='no'
+	echo "$NAME: Little Snitch is best updated by itself, so the app will now launch."
+
+	open "$INSTALL_TO"
+
+	exit 0
 
 else
 
 	FIRST_INSTALL='yes'
 fi
 
-FILENAME="$HOME/Downloads/${${INSTALL_TO:t:r}// /}-${LATEST_VERSION}_${LATEST_BUILD}.dmg"
+FILENAME="$HOME/Downloads/LittleSnitch-${LATEST_VERSION}_${LATEST_BUILD}.dmg"
 
 if (( $+commands[lynx] ))
 then
 
-# DO NOT INDENT THAT ONE LINE
-	RELEASE_NOTES=$(curl -sfLS "$RELEASE_NOTES_URL" \
-	| sed -e 's#<#\
-<#g' -e '1,/<article/d' -e '/<\/ul>/,$d' \
-	| tr -d '\012' \
-	| lynx -dump -nomargins -width='10000' -assume_charset=UTF-8 -pseudo_inlines -stdin -hiddenlinks=ignore)
-
-	echo "$RELEASE_NOTES\n\nSource: ${RELEASE_NOTES_URL}\nURL: ${URL}" | tee "$FILENAME:r.txt"
+	( echo "$NAME: Release Notes:" ;
+	lynx -dump -nomargins -width=10000 -assume_charset=UTF-8 -pseudo_inlines "$RELEASE_NOTES_URL"; echo '\n\n' ) \
+	| tee "$FILENAME:r.txt"
 
 fi
 
@@ -112,7 +132,28 @@ EXIT="$?"
 
 [[ ! -s "$FILENAME" ]] && echo "$NAME: $FILENAME is zero bytes." && rm -f "$FILENAME" && exit 0
 
-(cd "$FILENAME:h" ; echo "\nLocal sha256:" ; shasum -a 256 "$FILENAME:t" ) >>| "$FILENAME:r.txt"
+egrep -q '^Local sha256:$' "$FILENAME:r.txt" 2>/dev/null
+
+EXIT="$?"
+
+if [ "$EXIT" = "1" -o ! -e "$FILENAME:r.txt" ]
+then
+	(cd "$FILENAME:h" ; \
+	echo "\n\nLocal sha256:" ; \
+	shasum -a 256 "$FILENAME:t" \
+	)  >>| "$FILENAME:r.txt"
+fi
+
+
+
+
+
+
+
+
+
+
+
 
 echo "$NAME: Mounting $FILENAME:"
 
@@ -137,6 +178,7 @@ then
 	&& osascript -e "tell application \"$INSTALL_TO:t:r\" to quit"
 
 		# move installed version to trash
+	echo "$NAME: moving old installed version to '$HOME/.Trash'..."
 	mv -f "$INSTALL_TO" "$HOME/.Trash/$INSTALL_TO:t:r.${INSTALLED_VERSION}_${INSTALLED_BUILD}.app"
 
 	EXIT="$?"
@@ -144,11 +186,10 @@ then
 	if [[ "$EXIT" != "0" ]]
 	then
 
-		echo "$NAME: failed to move '$INSTALL_TO' to Trash. ('mv' \$EXIT = $EXIT)"
+		echo "$NAME: failed to move '$INSTALL_TO' to '$HOME/.Trash'. ('mv' \$EXIT = $EXIT)"
 
 		exit 1
 	fi
-
 fi
 
 echo "$NAME: Installing '$MNTPNT/$INSTALL_TO:t' to '$INSTALL_TO': "
@@ -169,6 +210,18 @@ fi
 [[ "$LAUNCH" = "yes" ]] && open -a "$INSTALL_TO"
 
 echo -n "$NAME: Unmounting $MNTPNT: " && diskutil eject "$MNTPNT"
+
+
+
+
+
+
+
+
+
+
+
+
 
 exit 0
 #EOF
